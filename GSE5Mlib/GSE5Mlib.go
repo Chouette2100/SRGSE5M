@@ -10,7 +10,7 @@ import (
 
 	"os"
 
-	"io/ioutil"
+	//	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
 
@@ -53,11 +53,12 @@ import (
 	0101G4	貢献ポイントランキングを取得するためイベント終了時刻の10分後までデータ取得を行う。
 	0101G5	NewDocument()をNewDocumentFromReader()に変更する。DBConfigにTimeLimitを追加する。
 	0102A0a	ブロックランキングの最終結果の取得にsrapi.GetEventBlockRanking()を使用する（テスト、Event_id=30030限定）
+	0102B0	ルーム情報の取得でエラーが発生したときの処理を追加する。
 
 
 */
 
-const Version = "0102A0a"
+const Version = "0102B0"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -336,7 +337,7 @@ var Dbconfig *DBConfig
 //                      https://note.com/artefactnote/n/n8c22d1ac4b86
 //
 func LoadConfig(filePath string) (dbconfig *DBConfig, err error) {
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +428,11 @@ func GetUserInfForHistory() (status int) {
 
 		roominf.Genre, roominf.Rank, roominf.Nrank, roominf.Level, roominf.Followers, roominf.Name, roominf.Account, _, status =
 			GetRoomInfoByAPI(roominf.ID)
-		InsertIntoOrUpdateUser(time.Now().Truncate(time.Second), eventid, roominf)
+		if status == 0 && roominf.Followers != 0 {
+			InsertIntoOrUpdateUser(time.Now().Truncate(time.Second), eventid, roominf)
+		} else {
+			log.Printf("GetUserInfForHistory(): GetRoomInfoByAPI() returned status=%d, roominf=%+v\n", status, roominf)
+		}
 	}
 
 	return
