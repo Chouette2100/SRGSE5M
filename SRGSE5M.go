@@ -59,6 +59,7 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 	Ver. 020AK00 GetPointsALL()でのDBの更新にトランザクションを用いる。
 	Ver. 020AK01 ルームが対象ではないイベントに参加しているときはscoremap[id]の存在チェックを行う。
 	Ver. 020AK02 デッドロック対策としてdeleteでwhere句にeventidを追加する。
+	Ver. 020AL00 最終結果確定時にMakePointPerSlot()を実行する。これにともないSRDBlibを導入する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
@@ -93,11 +94,12 @@ import (
 
 	//	. "MyModule/ShowroomCGIlib"
 	"SRGSE5M/GSE5Mlib"
+	"SRGSE5M/SRDBlib"
 
 	"github.com/dustin/go-humanize"
 )
 
-const version = "020AK02a"
+const version = "020AL00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -226,28 +228,28 @@ func InsertIntoPoints(
 
 	//	log.Printf("InsertIntoPoints()　db.Prepare()\n")
 	var stmt *sql.Stmt
-	stmt, GSE5Mlib.Err = tx.Prepare("INSERT INTO points(ts, user_id, eventid, point, `rank`, gap, pstatus, ptime, qstatus, qtime) VALUES(?,?,?,?,?,?,?,?,?,?)")
-	if GSE5Mlib.Err != nil {
-		log.Printf("InsertIntoPoints() select err=[%s]\n", GSE5Mlib.Err.Error())
+	stmt, SRDBlib.Err = tx.Prepare("INSERT INTO points(ts, user_id, eventid, point, `rank`, gap, pstatus, ptime, qstatus, qtime) VALUES(?,?,?,?,?,?,?,?,?,?)")
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoPoints() select err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 	defer stmt.Close()
 
 	//	log.Printf("InsertIntoPoints()　row.Exec("InsertIntoOrUpdate",...)\n")
 	//	log.Printf("timestamp=%v, userno=%v, eventid=%v, point=%v, rank=%v, gap=%v, pstatus=%v, ptime=%v, qstatus=%v, qtime=%v\n", timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
-	_, GSE5Mlib.Err = stmt.Exec(timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
+	_, SRDBlib.Err = stmt.Exec(timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("InsertIntoPoints() insert into points err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoPoints() insert into points err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 
 	//	===============================================
 	sqlstmt := "update eventuser set point = ? where eventid = ? and userno = ?"
-	_, GSE5Mlib.Err = tx.Exec(sqlstmt, point, eventid, userno)
+	_, SRDBlib.Err = tx.Exec(sqlstmt, point, eventid, userno)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("InsertIntoPoints() update eventuser err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoPoints() update eventuser err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 
@@ -272,44 +274,44 @@ func InsertIntoOrUpdatePoints(
 
 	nrow := 0
 	sqlstmt := "select count(*) from points where ts = ? and eventid = ? and user_id= ?"
-	GSE5Mlib.Err = GSE5Mlib.Db.QueryRow(sqlstmt, timestamp, eventid, userno).Scan(&nrow)
-	if GSE5Mlib.Err != nil {
-		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", GSE5Mlib.Err.Error())
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, timestamp, eventid, userno).Scan(&nrow)
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 	if nrow == 0 {
 		//	log.Printf("InsertIntoOrUpdatePoints()　db.Prepare()\n")
 		var stmt *sql.Stmt
-		stmt, GSE5Mlib.Err = GSE5Mlib.Db.Prepare("INSERT INTO points(ts, user_id, eventid, point, `rank`, gap, pstatus, ptime, qstatus, qtime) VALUES(?,?,?,?,?,?,?,?,?,?)")
-		if GSE5Mlib.Err != nil {
-			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", GSE5Mlib.Err.Error())
+		stmt, SRDBlib.Err = SRDBlib.Db.Prepare("INSERT INTO points(ts, user_id, eventid, point, `rank`, gap, pstatus, ptime, qstatus, qtime) VALUES(?,?,?,?,?,?,?,?,?,?)")
+		if SRDBlib.Err != nil {
+			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
 			status = -1
 		}
 		defer stmt.Close()
 
 		//	log.Printf("InsertIntoOrUpdatePoints()　row.Exec("InsertIntoOrUpdate",...)\n")
-		_, GSE5Mlib.Err = stmt.Exec(timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
+		_, SRDBlib.Err = stmt.Exec(timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
 
-		if GSE5Mlib.Err != nil {
-			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", GSE5Mlib.Err.Error())
+		if SRDBlib.Err != nil {
+			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
 			status = -1
 		}
 	} else {
 		sqlstmt = "update points set point = ?, `rank`=?, gap=?, pstatus=?, ptime =?, qstatus=?, qtime=? where ts=? and eventid=? and user_id=?"
-		_, GSE5Mlib.Err = GSE5Mlib.Db.Exec(sqlstmt, point, rank, gap, pstatus, ptime, qstatus, qtime, timestamp, eventid, userno)
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, point, rank, gap, pstatus, ptime, qstatus, qtime, timestamp, eventid, userno)
 
-		if GSE5Mlib.Err != nil {
-			log.Printf("InsertIntoOrUpdatePoints() update points err=[%s]\n", GSE5Mlib.Err.Error())
+		if SRDBlib.Err != nil {
+			log.Printf("InsertIntoOrUpdatePoints() update points err=[%s]\n", SRDBlib.Err.Error())
 			status = -1
 		}
 	}
 
 	//	===============================================
 	sqlstmt = "update eventuser set point = ? where eventid = ? and userno = ?"
-	_, GSE5Mlib.Err = GSE5Mlib.Db.Exec(sqlstmt, point, eventid, userno)
+	_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, point, eventid, userno)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("GetSchedule() update eventuser err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("GetSchedule() update eventuser err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 
@@ -321,10 +323,10 @@ func DeleteFromPoints(tx *sql.Tx, eventid string, ts time.Time, user_id int) {
 	sql := "delete from points where eventid = ? and ts= ? and user_id = ?"
 
 	//	log.Printf("Db.Exec(\"delete ...\")\n")
-	_, GSE5Mlib.Err = tx.Exec(sql, eventid, ts, user_id)
+	_, SRDBlib.Err = tx.Exec(sql, eventid, ts, user_id)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("DeleteFromPoints() select err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("DeleteFromPoints() select err=[%s]\n", SRDBlib.Err.Error())
 		//	status = -1
 	}
 
@@ -348,17 +350,17 @@ func InsertIntoTimeTable(
 	var stmt *sql.Stmt
 	sql := "INSERT INTO timetable(eventid, userid, sampletm1, stime, etime, target, earnedpoint, status)"
 	sql += " VALUES(?,?,?,?,?,?,?,?)"
-	stmt, GSE5Mlib.Err = GSE5Mlib.Db.Prepare(sql)
-	if GSE5Mlib.Err != nil {
-		log.Printf("InsertIntoPoints() prepare() err=[%s]\n", GSE5Mlib.Err.Error())
+	stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoPoints() prepare() err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 	defer stmt.Close()
 
-	_, GSE5Mlib.Err = stmt.Exec(eventid, userno, st1, stime, etime, -1, earnedp, 0)
+	_, SRDBlib.Err = stmt.Exec(eventid, userno, st1, stime, etime, -1, earnedp, 0)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("InsertIntoEventrank() exec() err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoEventrank() exec() err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 
@@ -384,9 +386,9 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 	timestamp := time.Now().Truncate(time.Second)
 
 	var tx *sql.Tx
-	tx, GSE5Mlib.Err = GSE5Mlib.Db.Begin()
-	if GSE5Mlib.Err != nil {
-		log.Printf("GetPointsAll() begin err=[%s]\n", GSE5Mlib.Err.Error())
+	tx, SRDBlib.Err = SRDBlib.Db.Begin()
+	if SRDBlib.Err != nil {
+		log.Printf("GetPointsAll() begin err=[%s]\n", SRDBlib.Err.Error())
 		return -1
 	}
 	defer tx.Rollback()
@@ -979,17 +981,17 @@ func ScanActive(gschedule Gschedule) (status int) {
 	var rows *sql.Rows
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
-	stmt, GSE5Mlib.Err = GSE5Mlib.Db.Prepare(sqlstmt)
-	if GSE5Mlib.Err != nil {
-		log.Printf("ScanActive() Prepare() err=%s\n", GSE5Mlib.Err.Error())
+	stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sqlstmt)
+	if SRDBlib.Err != nil {
+		log.Printf("ScanActive() Prepare() err=%s\n", SRDBlib.Err.Error())
 		status = -5
 		return
 	}
 	defer stmt.Close()
 
-	rows, GSE5Mlib.Err = stmt.Query(gschedule.Eventid)
-	if GSE5Mlib.Err != nil {
-		log.Printf("ScanActive() Query() (6) err=%s\n", GSE5Mlib.Err.Error())
+	rows, SRDBlib.Err = stmt.Query(gschedule.Eventid)
+	if SRDBlib.Err != nil {
+		log.Printf("ScanActive() Query() (6) err=%s\n", SRDBlib.Err.Error())
 		status = -6
 		return
 	}
@@ -1014,8 +1016,8 @@ func ScanActive(gschedule Gschedule) (status int) {
 
 	}
 
-	if GSE5Mlib.Err = rows.Err(); GSE5Mlib.Err != nil {
-		log.Printf("ScanActive() rows err=%s\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err = rows.Err(); SRDBlib.Err != nil {
+		log.Printf("ScanActive() rows err=%s\n", SRDBlib.Err.Error())
 		status = -8
 		return
 	}
@@ -1040,9 +1042,9 @@ func SelectIstargetAndIiscntrbpoint(
 ) {
 
 	sqlstmt := "select istarget, iscntrbpoints from eventuser where eventid = ? and userno =?"
-	GSE5Mlib.Err = GSE5Mlib.Db.QueryRow(sqlstmt, eventid, userno).Scan(&istarget, &iscntrbpoint)
-	if GSE5Mlib.Err != nil {
-		log.Printf("SelectIstargetAndIiscntrbpoint() Prepare() err=%s\n", GSE5Mlib.Err.Error())
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid, userno).Scan(&istarget, &iscntrbpoint)
+	if SRDBlib.Err != nil {
+		log.Printf("SelectIstargetAndIiscntrbpoint() Prepare() err=%s\n", SRDBlib.Err.Error())
 		istarget = "N"
 		iscntrbpoint = "N"
 		status = -5
@@ -1086,9 +1088,9 @@ func CopyScore(gschedule Gschedule) (status int) {
 	*/
 	var gtime time.Time
 	sqlstmt := "select distinct max(ts) from points where eventid = ?"
-	GSE5Mlib.Err = GSE5Mlib.Db.QueryRow(sqlstmt, eventid).Scan(&gtime)
-	if GSE5Mlib.Err != nil {
-		log.Printf("CopyScore() (4) err=%s\n", GSE5Mlib.Err.Error())
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid).Scan(&gtime)
+	if SRDBlib.Err != nil {
+		log.Printf("CopyScore() (4) err=%s\n", SRDBlib.Err.Error())
 		status = -4
 		return
 	}
@@ -1102,17 +1104,17 @@ func CopyScore(gschedule Gschedule) (status int) {
 		return
 	}
 
-	stmt, GSE5Mlib.Err = GSE5Mlib.Db.Prepare("select user_id, `rank`, point from points where eventid = ? and ts = ?")
-	if GSE5Mlib.Err != nil {
-		log.Printf("CopyScore() (5) err=%s\n", GSE5Mlib.Err.Error())
+	stmt, SRDBlib.Err = SRDBlib.Db.Prepare("select user_id, `rank`, point from points where eventid = ? and ts = ?")
+	if SRDBlib.Err != nil {
+		log.Printf("CopyScore() (5) err=%s\n", SRDBlib.Err.Error())
 		status = -5
 		return
 	}
 	defer stmt.Close()
 
-	rows, GSE5Mlib.Err = stmt.Query(eventid, gtime)
-	if GSE5Mlib.Err != nil {
-		log.Printf("CopyScore() (6) err=%s\n", GSE5Mlib.Err.Error())
+	rows, SRDBlib.Err = stmt.Query(eventid, gtime)
+	if SRDBlib.Err != nil {
+		log.Printf("CopyScore() (6) err=%s\n", SRDBlib.Err.Error())
 		status = -6
 		return
 	}
@@ -1124,17 +1126,17 @@ func CopyScore(gschedule Gschedule) (status int) {
 	i := 0
 
 	for rows.Next() {
-		GSE5Mlib.Err = rows.Scan(&score.Userno, &score.Rank, &score.Point)
-		if GSE5Mlib.Err != nil {
-			log.Printf("CopyScore() (7) err=%s\n", GSE5Mlib.Err.Error())
+		SRDBlib.Err = rows.Scan(&score.Userno, &score.Rank, &score.Point)
+		if SRDBlib.Err != nil {
+			log.Printf("CopyScore() (7) err=%s\n", SRDBlib.Err.Error())
 			status = -7
 			return
 		}
 		scorelist = append(scorelist, score)
 		i++
 	}
-	if GSE5Mlib.Err = rows.Err(); GSE5Mlib.Err != nil {
-		log.Printf("CopyScore() (8) err=%s\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err = rows.Err(); SRDBlib.Err != nil {
+		log.Printf("CopyScore() (8) err=%s\n", SRDBlib.Err.Error())
 		status = -8
 		return
 	}
@@ -1154,10 +1156,10 @@ func CopyScore(gschedule Gschedule) (status int) {
 	}
 
 	sqlstmt = "update event set rstatus = ? where eventid = ?"
-	_, GSE5Mlib.Err = GSE5Mlib.Db.Exec(sqlstmt, "Provisional", eventid)
+	_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, "Provisional", eventid)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("CopyScore() update event err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("CopyScore() update event err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
 
@@ -1195,12 +1197,14 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	}
 
 	sqlstmt := "update event set rstatus = ? where eventid = ?"
-	_, GSE5Mlib.Err = GSE5Mlib.Db.Exec(sqlstmt, "Confirmed", eventid)
+	_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, "Confirmed", eventid)
 
-	if GSE5Mlib.Err != nil {
-		log.Printf("GetConfirmed() update event err=[%s]\n", GSE5Mlib.Err.Error())
+	if SRDBlib.Err != nil {
+		log.Printf("GetConfirmed() update event err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
 	}
+
+	SRDBlib.MakePointPerSlot(eventid)
 
 	return
 
@@ -1227,7 +1231,7 @@ func GetSchedule() (
 	tnow := time.Now()
 
 	sqlstmt := "select eventid, starttime, endtime, rstatus from event where endtime > ? "
-	stmt, Err := GSE5Mlib.Db.Prepare(sqlstmt)
+	stmt, Err := SRDBlib.Db.Prepare(sqlstmt)
 	if Err != nil {
 		log.Printf("GetSchedule() Prepare() err=%s\n", Err.Error())
 		status = -5
@@ -1314,7 +1318,7 @@ func GetSchedule() (
 	for i := 0; i < len(gschedulelist); i++ {
 
 		sqlstmt := "select intervalmin, modmin, modsec from event where eventid = ?"
-		Err = GSE5Mlib.Db.QueryRow(sqlstmt, gschedulelist[i].Eventid).Scan(&gschedulelist[i].Intervalmin, &gschedulelist[i].Modmin, &gschedulelist[i].Modsec)
+		Err = SRDBlib.Db.QueryRow(sqlstmt, gschedulelist[i].Eventid).Scan(&gschedulelist[i].Intervalmin, &gschedulelist[i].Modmin, &gschedulelist[i].Modsec)
 
 		if Err != nil {
 			log.Printf("GetSchedule() select err=[%s]\n", Err.Error())
@@ -1338,7 +1342,7 @@ func main() {
 	snmap = make(map[int]string)
 	scoremap = map[int]*LastScore{}
 
-	logfilename := version + "_" + GSE5Mlib.Version + "_" + time.Now().Format("20060102") + ".txt"
+	logfilename := version + "_" + GSE5Mlib.Version + "_" + SRDBlib.Version+ "_" + time.Now().Format("20060102") + ".txt"
 	logfile, err := os.OpenFile(logfilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		panic("cannnot open logfile: " + logfilename + err.Error())
@@ -1363,7 +1367,7 @@ func main() {
 	if status != 0 {
 		return
 	}
-	defer GSE5Mlib.Db.Close()
+	defer SRDBlib.Db.Close()
 
 	RestoreScoremap()
 
