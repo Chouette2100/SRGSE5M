@@ -57,11 +57,12 @@ import (
 	0102A0a	ブロックランキングの最終結果の取得にsrapi.GetEventBlockRanking()を使用する（テスト、Event_id=30030限定）
 	0102B0	ルーム情報の取得でエラーが発生したときの処理を追加する。
 	0102C0	SRDBlibを導入したことへ対応する。
+	0102D0	できるだけ早く確定情報を取得する。
 
 
 */
 
-const Version = "0102C0"
+const Version = "0102D0"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1256,11 +1257,13 @@ func InsertIntoEventUser(i int, eventid string, roominf RoomInfo) (status int) {
 
 func GetEventInfAndRoomList(
 	eventid string,
+	ieventid int,
 	breg int,
 	ereg int,
 	eventinfo *Event_Inf,
 	roominfolist *RoomInfoList,
 ) (
+	isquest bool,
 	status int,
 ) {
 
@@ -1399,6 +1402,12 @@ func GetEventInfAndRoomList(
 			}
 			roominfo.Point = int(point)
 
+			quest := s.Find(".label-quest").Text()
+			if quest != "" {
+				isquest  = true
+				return false
+			}
+
 			ReplaceString := ""
 
 			selection_c := s.Find(".listcardinfo-menu")
@@ -1424,7 +1433,8 @@ func GetEventInfAndRoomList(
 
 	} else {
 
-		event_id := 30030
+		isquest = false
+		//	event_id := 30030
 		eia := strings.Split(eventid, "=")
 		blockid, _ := strconv.Atoi(eia[1])
 
@@ -1437,7 +1447,7 @@ func GetEventInfAndRoomList(
 		//      すべての処理が終了したらcookiejarを保存する。
 		defer jar.Save()
 
-		ebr, err := ghsrapi.GetEventBlockRanking(client, event_id, blockid, breg, ereg)
+		ebr, err := ghsrapi.GetEventBlockRanking(client, ieventid, blockid, breg, ereg)
 		if err != nil {
 			log.Printf("GetEventBlockRanking() err=%s\n", err.Error())
 			status = 1
@@ -1456,7 +1466,6 @@ func GetEventInfAndRoomList(
 			roominfo.Name = br.Room_name
 
 			roominfo.Point = br.Point
-
 			*roominfolist = append(*roominfolist, roominfo)
 
 		}

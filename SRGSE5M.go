@@ -60,7 +60,7 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 	Ver. 020AK01 ルームが対象ではないイベントに参加しているときはscoremap[id]の存在チェックを行う。
 	Ver. 020AK02 デッドロック対策としてdeleteでwhere句にeventidを追加する。
 	Ver. 020AL00 最終結果確定時にMakePointPerSlot()を実行する。これにともないSRDBlibを導入する。
-
+	Ver. 020AM00 できるだけ早く確定情報を取得する。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
@@ -99,7 +99,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-const version = "020AL00"
+const version = "020AM00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -136,8 +136,9 @@ type LastScore struct {
 }
 
 type Gschedule struct {
-	Eventid string
-	Endtime time.Time
+	Eventid  string
+	Ieventid int
+	Endtime  time.Time
 	//	Eventno     int
 	Intervalmin int
 	Modmin      int
@@ -151,11 +152,11 @@ type Gschedulelist []Gschedule
 
 //	var eventmap map[string]int
 
-//	**重要**	構造体のmapを作りたいときはかならずポインターのmapにする。
+// **重要**	構造体のmapを作りたいときはかならずポインターのmapにする。
 var eventmap map[string]*GSE5Mlib.Event_Inf
 var snmap map[int]string
 
-//	**重要**	構造体のmapを作りたいときはかならずポインターのmapにする。
+// **重要**	構造体のmapを作りたいときはかならずポインターのmapにする。
 var scoremap map[int]*LastScore
 
 //	https://tech-up.hatenablog.com/entry/2019/01/05/212630
@@ -368,7 +369,7 @@ func InsertIntoTimeTable(
 }
 
 /*
-	配信者のリストからそれぞれの獲得ポイントなどを取得する。
+配信者のリストからそれぞれの獲得ポイントなどを取得する。
 */
 func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (status int) {
 
@@ -417,9 +418,9 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
 				log.Printf(" eventid=%s isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
 				dup := -9
-				if _, ok := scoremap[id];  ok {
+				if _, ok := scoremap[id]; ok {
 					dup = scoremap[id].Dup
-					}
+				}
 				log.Printf(" eventid=%s timestamp=%v gschedule.Endtime=%v scoremap[id].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
 				if timestamp.After(gschedule.Endtime) {
 					//	イベントが終了している。
@@ -1097,63 +1098,69 @@ func CopyScore(gschedule Gschedule) (status int) {
 
 	log.Printf("gtime=%s\n", gtime.Format("2006/01/02 15:04:06"))
 
-	//	---------------------------------------------------
+	if gtime.Before(gschedule.Endtime) {
+		//	終了処理が行われていない。
 
-	if gtime.Before(gschedule.Endtime.Add(-15 * time.Minute)) {
-		//	最新データ（＝イベント終了直前のデータ）が存在しない。
-		return
-	}
+		//	---------------------------------------------------
 
-	stmt, SRDBlib.Err = SRDBlib.Db.Prepare("select user_id, `rank`, point from points where eventid = ? and ts = ?")
-	if SRDBlib.Err != nil {
-		log.Printf("CopyScore() (5) err=%s\n", SRDBlib.Err.Error())
-		status = -5
-		return
-	}
-	defer stmt.Close()
-
-	rows, SRDBlib.Err = stmt.Query(eventid, gtime)
-	if SRDBlib.Err != nil {
-		log.Printf("CopyScore() (6) err=%s\n", SRDBlib.Err.Error())
-		status = -6
-		return
-	}
-	defer rows.Close()
-
-	var score GSE5Mlib.CurrentScore
-	var scorelist []GSE5Mlib.CurrentScore
-
-	i := 0
-
-	for rows.Next() {
-		SRDBlib.Err = rows.Scan(&score.Userno, &score.Rank, &score.Point)
-		if SRDBlib.Err != nil {
-			log.Printf("CopyScore() (7) err=%s\n", SRDBlib.Err.Error())
-			status = -7
+		if gtime.Before(gschedule.Endtime.Add(-15 * time.Minute)) {
+			//	最新データ（＝イベント終了直前のデータ）が存在しない。
 			return
 		}
-		scorelist = append(scorelist, score)
-		i++
-	}
-	if SRDBlib.Err = rows.Err(); SRDBlib.Err != nil {
-		log.Printf("CopyScore() (8) err=%s\n", SRDBlib.Err.Error())
-		status = -8
-		return
-	}
 
-	for _, score = range scorelist {
-		InsertIntoOrUpdatePoints(svtime, score.Userno, score.Point, score.Rank, 0, eventid, "Prov.", "", "", "")
-		/*
-			_, iscntrbpoint, _ := SelectIstargetAndIiscntrbpoint(eventid, score.Userno)
-			if iscntrbpoint == "Y" {
-				//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
-				log.Printf("  InsertIntoTimeTable() called. eventid=%s userno=%d\n", eventid, score.Userno)
-				//	最後の2つの引数はダミー 4月13日までに修正のこと
-				InsertIntoTimeTable(eventid, score.Userno, svtime, 0, time.Now(), time.Now())
+		stmt, SRDBlib.Err = SRDBlib.Db.Prepare("select user_id, `rank`, point from points where eventid = ? and ts = ?")
+		if SRDBlib.Err != nil {
+			log.Printf("CopyScore() (5) err=%s\n", SRDBlib.Err.Error())
+			status = -5
+			return
+		}
+		defer stmt.Close()
+
+		rows, SRDBlib.Err = stmt.Query(eventid, gtime)
+		if SRDBlib.Err != nil {
+			log.Printf("CopyScore() (6) err=%s\n", SRDBlib.Err.Error())
+			status = -6
+			return
+		}
+		defer rows.Close()
+
+		var score GSE5Mlib.CurrentScore
+		var scorelist []GSE5Mlib.CurrentScore
+
+		i := 0
+
+		for rows.Next() {
+			SRDBlib.Err = rows.Scan(&score.Userno, &score.Rank, &score.Point)
+			if SRDBlib.Err != nil {
+				log.Printf("CopyScore() (7) err=%s\n", SRDBlib.Err.Error())
+				status = -7
+				return
 			}
-		*/
+			scorelist = append(scorelist, score)
+			i++
+		}
+		if SRDBlib.Err = rows.Err(); SRDBlib.Err != nil {
+			log.Printf("CopyScore() (8) err=%s\n", SRDBlib.Err.Error())
+			status = -8
+			return
+		}
 
+		for _, score = range scorelist {
+			InsertIntoOrUpdatePoints(svtime, score.Userno, score.Point, score.Rank, 0, eventid, "Prov.", "", "", "")
+			/*
+				_, iscntrbpoint, _ := SelectIstargetAndIiscntrbpoint(eventid, score.Userno)
+				if iscntrbpoint == "Y" {
+					//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
+					log.Printf("  InsertIntoTimeTable() called. eventid=%s userno=%d\n", eventid, score.Userno)
+					//	最後の2つの引数はダミー 4月13日までに修正のこと
+					InsertIntoTimeTable(eventid, score.Userno, svtime, 0, time.Now(), time.Now())
+				}
+			*/
+
+		}
 	}
+
+	//	終了処理が行われていてもこのパスを通るのはデータの整合性が失われた（失わせた）ケース。
 
 	sqlstmt = "update event set rstatus = ? where eventid = ?"
 	_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, "Provisional", eventid)
@@ -1179,32 +1186,41 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	//	svtime := gschedule.Endtime.Add(1 * time.Second)
 	svtime := gschedule.Endtime.Add(time.Duration(ConfirmedAt) * time.Second)
 	eventid := gschedule.Eventid
+	ieventid := gschedule.Ieventid
 
 	//	イベントに参加しているルームの一覧を取得します。
 	//	ルーム名、ID、URLを取得しますが、イベント終了直後の場合の最終獲得ポイントが表示されている場合はそれも取得します。
 	breg := 1
 	//	確定値（最終獲得ポイント）が発表されるのは30位まで。確定値が発表されないイベントもあるので要注意。
 	ereg := 30
-	status = GSE5Mlib.GetEventInfAndRoomList(eventid, breg, ereg, &eventinf, &roominflist)
+	isquest, status := GSE5Mlib.GetEventInfAndRoomList(eventid, ieventid, breg, ereg, &eventinf, &roominflist)
 
+	isconfirm := false
 	for i, roominf := range roominflist {
 
 		//	log.Printf(" i+1=%d, userno=%d, point=%d\n", i+1, roominf.Userno, roominf.Point)
 		if roominf.Point > 0 {
 			//	最終獲得ポイントが発表された場合のみ更新する
 			InsertIntoOrUpdatePoints(svtime, roominf.Userno, roominf.Point, i+1, 0, eventid, "Conf.", "", "", "")
+			isconfirm = true
 		}
 	}
 
-	sqlstmt := "update event set rstatus = ? where eventid = ?"
-	_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, "Confirmed", eventid)
+	log.Printf("  isconfirm =%t, isquest=%t\n", isconfirm, isquest)
+	if isconfirm || isquest {
+		sqlstmt := "update event set rstatus = ? where eventid = ?"
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, "Confirmed", eventid)
 
-	if SRDBlib.Err != nil {
-		log.Printf("GetConfirmed() update event err=[%s]\n", SRDBlib.Err.Error())
-		status = -1
+		if SRDBlib.Err != nil {
+			log.Printf("GetConfirmed() update event err=[%s]\n", SRDBlib.Err.Error())
+			status = -1
+			return
+		}
+
+		if isconfirm {
+			SRDBlib.MakePointPerSlot(eventid)
+		}
 	}
-
-	SRDBlib.MakePointPerSlot(eventid)
 
 	return
 
@@ -1230,7 +1246,7 @@ func GetSchedule() (
 
 	tnow := time.Now()
 
-	sqlstmt := "select eventid, starttime, endtime, rstatus from event where endtime > ? "
+	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus from event where endtime > ? "
 	stmt, Err := SRDBlib.Db.Prepare(sqlstmt)
 	if Err != nil {
 		log.Printf("GetSchedule() Prepare() err=%s\n", Err.Error())
@@ -1251,10 +1267,11 @@ func GetSchedule() (
 	var gschedule Gschedule
 	var starttime, endtime time.Time
 	var rstatus string
+	var ieventid int
 
 	i := 0
 	for rows.Next() {
-		Err = rows.Scan(&eventid, &starttime, &endtime, &rstatus)
+		Err = rows.Scan(&eventid, &ieventid, &starttime, &endtime, &rstatus)
 
 		if Err != nil {
 			log.Printf("GetSchedule() Scan() err=%s\n", Err.Error())
@@ -1278,14 +1295,15 @@ func GetSchedule() (
 			//	} else if tnow.After(endtime.Add(15*time.Minute)) && tnow.Before(end_date.Add(13*time.Hour)) {
 
 			//	RU20H1	} else if tnow.After(endtime.Add(15 * time.Minute)) {
-		} else if tnow.After(endtime.Add(15*time.Minute)) && tnow.Before(end_date.Add(715*time.Minute)) {
+		//	} else if tnow.After(endtime.Add(15*time.Minute)) && tnow.Before(end_date.Add(715*time.Minute)) {
+		} else if tnow.After(endtime.Add(10*time.Minute)) && rstatus != "Provisional" {
 			if rstatus == "Provisional" {
 				continue
 			}
 			gschedule.Method = "CopyScore"
 			//	} else if tnow.Before(end_date.Add(35 * time.Hour)) {
 			//	} else if rstatus == "Provisional" && tnow.After(end_date.Add(715*time.Minute)) {
-		} else if rstatus == "Provisional" && tnow.After(end_date.Add(810*time.Minute)) {
+		} else if rstatus == "Provisional" && tnow.After(end_date.Add(690*time.Minute)) {
 			gschedule.Method = "GetConfirmed"
 		} else {
 			continue
@@ -1300,6 +1318,7 @@ func GetSchedule() (
 			gschedule.Beforestart = true
 		}
 		gschedule.Eventid = eventid
+		gschedule.Ieventid = ieventid
 		gschedule.Endtime = endtime
 		gschedule.Done = false
 		gschedulelist = append(gschedulelist, gschedule)
@@ -1342,7 +1361,7 @@ func main() {
 	snmap = make(map[int]string)
 	scoremap = map[int]*LastScore{}
 
-	logfilename := version + "_" + GSE5Mlib.Version + "_" + SRDBlib.Version+ "_" + time.Now().Format("20060102") + ".txt"
+	logfilename := version + "_" + GSE5Mlib.Version + "_" + SRDBlib.Version + "_" + time.Now().Format("20060102") + ".txt"
 	logfile, err := os.OpenFile(logfilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		panic("cannnot open logfile: " + logfilename + err.Error())
@@ -1351,9 +1370,8 @@ func main() {
 	//	log.SetOutput(logfile)
 	log.SetOutput(io.MultiWriter(logfile, os.Stdout))
 
-
 	log.Printf(" ****************************\n")
-	log.Printf(" GetScoreEvery5Minutes version=%s %s\n",  version, GSE5Mlib.Version)
+	log.Printf(" GetScoreEvery5Minutes version=%s %s\n", version, GSE5Mlib.Version)
 	GSE5Mlib.Dbconfig, err = GSE5Mlib.LoadConfig("ServerConfig.yml")
 	if err != nil {
 		panic(err)
@@ -1408,6 +1426,7 @@ outerloop:
 				if ss < nextsec {
 					time.Sleep(time.Duration(nextsec-ss) * time.Second)
 				}
+				log.Printf(" eventid=%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
 				switch gschedulelist[idx].Method {
 				case "GetScore":
 					ScanActive(gschedulelist[idx])
@@ -1438,7 +1457,7 @@ outerloop:
 		if hh24 == 0 {
 			hh24 = 24
 		}
-		if hh24 % GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
+		if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
 			//	一定時間経ったら処理を終了する
 			break outerloop
 		}
