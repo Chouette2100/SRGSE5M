@@ -61,6 +61,7 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 	Ver. 020AK02 デッドロック対策としてdeleteでwhere句にeventidを追加する。
 	Ver. 020AL00 最終結果確定時にMakePointPerSlot()を実行する。これにともないSRDBlibを導入する。
 	Ver. 020AM00 できるだけ早く確定情報を取得する。
+	Ver. 020AN00 できるだけ早く確定情報を取得する（フェーズ移行の条件の見直し）
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
@@ -99,7 +100,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-const version = "020AM00"
+const version = "020AN00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1281,31 +1282,25 @@ func GetSchedule() (
 
 		//	log.Printf(" eventid=%s rstatus=%s\n", eventid, rstatus)
 		if rstatus == "Confirmed" {
+			//	確定した最終結果がすでに保存されたイベントは対象ではない。
 			continue
 		}
 
 		end_date := endtime.Truncate(time.Hour).Add(-time.Duration(endtime.Hour())*time.Hour).AddDate(0, 0, 1)
 		//	log.Printf("tnow= %s end_date=%s (%s)\n", tnow.Format("2006-01-02 15:04:05"), end_date.Format("2006-01-02 15:04:05"), eventid)
 
-		//	if tnow.Before(endtime) {						//	RU20G5
-		if tnow.Before(endtime.Add(10 * time.Minute)) { //	RU20G5
+		//	rstatusを書き換えて、終了処理をやり直すことができるように条件を設定してある。
+		if tnow.Before(endtime.Add(1 * time.Minute)) { //	RU20G5
+			//	イベント期間中は獲得ポイントデータを取得する。
 			gschedule.Method = "GetScore"
-			//	} else if tnow.Before(end_date.Add(25 * time.Hour)) {
-			//	} else if tnow.Before(end_date.Add(13 * time.Hour)) {
-			//	} else if tnow.After(endtime.Add(15*time.Minute)) && tnow.Before(end_date.Add(13*time.Hour)) {
-
-			//	RU20H1	} else if tnow.After(endtime.Add(15 * time.Minute)) {
-		//	} else if tnow.After(endtime.Add(15*time.Minute)) && tnow.Before(end_date.Add(715*time.Minute)) {
-		} else if tnow.After(endtime.Add(10*time.Minute)) && rstatus != "Provisional" {
-			if rstatus == "Provisional" {
-				continue
-			}
+		} else if tnow.After(endtime.Add(1 * time.Minute)) && rstatus != "Provisional" {
+			//	イベント終了後、最終結果を格納するためのレコードを一回だけ追加する。
 			gschedule.Method = "CopyScore"
-			//	} else if tnow.Before(end_date.Add(35 * time.Hour)) {
-			//	} else if rstatus == "Provisional" && tnow.After(end_date.Add(715*time.Minute)) {
-		} else if rstatus == "Provisional" && tnow.After(end_date.Add(690*time.Minute)) {
+		} else if rstatus == "Provisional" && tnow.After(end_date.Add(660*time.Minute)) {
+			//	イベント終了時を含む日の24時00分から11時間経過し、最終結果格納用のレコードが作成済みである。
 			gschedule.Method = "GetConfirmed"
 		} else {
+			//	イベント終了後最終結果格納用レコードが作成されたが終了日から11時間経過していない。
 			continue
 		}
 		//	log.Printf("tnow=%s Method=%s\n", tnow.Format("2006-01-02 15:04"), gschedule.Method)
