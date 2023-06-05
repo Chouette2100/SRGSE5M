@@ -64,11 +64,12 @@ import (
 	0102C0	SRDBlibを導入したことへ対応する。
 	0102D0	できるだけ早く確定情報を取得する。
 	0102E0	Room_url_keyでプリフィックスの削除を"/"から"/r/"に変更する。
+	0102E1	aprev_score(prank)の抜けを補う。
 
 
 */
 
-const Version = "0102E0"
+const Version = "0102E1"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -133,6 +134,7 @@ type RoomLevel struct {
 	Genre     string
 	Rank      string
 	Nrank     string
+	Prank     string
 	Level     int
 	Followers int
 	ts        time.Time
@@ -185,6 +187,7 @@ type RoomInfo struct {
 	Genre      string
 	Rank       string
 	Nrank      string
+	Prank      string
 	Followers  int
 	Sfollowers string
 	Level      int
@@ -436,7 +439,7 @@ func GetUserInfForHistory() (status int) {
 			status = -1
 		}
 
-		roominf.Genre, roominf.Rank, roominf.Nrank, roominf.Level, roominf.Followers, roominf.Name, roominf.Account, _, status =
+		roominf.Genre, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers, roominf.Name, roominf.Account, _, status =
 			GetRoomInfoByAPI(roominf.ID)
 		if status == 0 && roominf.Followers != 0 {
 			InsertIntoOrUpdateUser(time.Now().Truncate(time.Second), eventid, roominf)
@@ -679,6 +682,7 @@ func GetRoomInfoByAPI(room_id string) (
 	genre string,
 	rank string,
 	nrank string,
+	prank string,
 	level int,
 	followers int,
 	roomname string,
@@ -725,6 +729,9 @@ func GetRoomInfoByAPI(room_id string) (
 	ranks, _ := result.(map[string]interface{})["show_rank_subdivided"].(string)
 	rank = rank + " | " + ranks
 	nrank = humanize.Comma(int64(value))
+
+	value, _ = result.(map[string]interface{})["prev_score"].(float64)
+	prank = humanize.Comma(int64(value))
 
 	value, _ = result.(map[string]interface{})["room_level"].(float64)
 	level = int(value)
@@ -1034,6 +1041,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 	genre := ""
 	rank := ""
 	nrank := ""
+	prank := ""
 	level := 0
 	followers := 0
 
@@ -1041,9 +1049,9 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 
 		isnew = true
 
-		log.Printf("insert into userhistory(*new*) userno=%d rank=<%s> nrank=<%s> level=%d, followers=%d\n", userno, roominf.Rank, roominf.Nrank, roominf.Level, roominf.Followers)
+		log.Printf("insert into userhistory(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n", userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
 
-		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
+		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
 
 		//	log.Printf("sql=%s\n", sql)
 		stmt, err := SRDBlib.Db.Prepare(sql)
@@ -1064,6 +1072,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			roominf.Genre,
 			roominf.Rank,
 			roominf.Nrank,
+			roominf.Prank,
 			roominf.Level,
 			roominf.Followers,
 			tnow,
@@ -1082,6 +1091,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				roominf.Genre,
 				roominf.Rank,
 				roominf.Nrank,
+				roominf.Prank,
 				roominf.Level,
 				roominf.Followers,
 				tnow,
@@ -1094,8 +1104,8 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		}
 	} else {
 
-		sql := "select user_name, genre, `rank`, nrank, level, followers from user where userno = ?"
-		err = SRDBlib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &level, &followers)
+		sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
+		err = SRDBlib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
 		if err != nil {
 			log.Printf("err=[%s]\n", err.Error())
 			status = -1
@@ -1105,6 +1115,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		if roominf.Genre != genre ||
 			roominf.Rank != rank ||
 			roominf.Nrank != nrank ||
+			roominf.Prank != prank ||
 			roominf.Level != level ||
 			roominf.Followers != followers {
 
@@ -1117,6 +1128,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			sql += "genre=?,"
 			sql += "`rank`=?,"
 			sql += "nrank=?,"
+			sql += "prank=?,"
 			sql += "level=?,"
 			sql += "followers=?,"
 			sql += "ts=?,"
@@ -1137,6 +1149,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				roominf.Genre,
 				roominf.Rank,
 				roominf.Nrank,
+				roominf.Prank,
 				roominf.Level,
 				roominf.Followers,
 				tnow,
@@ -1153,7 +1166,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 	}
 
 	if isnew {
-		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?)"
+		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?)"
 		//	log.Printf("sql=%s\n", sql)
 		stmt, err := SRDBlib.Db.Prepare(sql)
 		if err != nil {
@@ -1169,6 +1182,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			roominf.Genre,
 			roominf.Rank,
 			roominf.Nrank,
+			roominf.Prank,
 			roominf.Level,
 			roominf.Followers,
 			tnow,
@@ -1183,6 +1197,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				roominf.Genre,
 				roominf.Rank,
 				roominf.Nrank,
+				roominf.Prank,
 				roominf.Level,
 				roominf.Followers,
 				tnow,
@@ -1692,7 +1707,7 @@ func SelectRoomLevel(userno int, levelonly int) (roomlevelinf RoomLevelInf, stat
 
 	status = 0
 
-	sqlstmt := "select user_name, genre, `rank`, nrank, level, followers, ts from userhistory where userno = ? order by ts desc"
+	sqlstmt := "select user_name, genre, `rank`, nrank, prank, level, followers, ts from userhistory where userno = ? order by ts desc"
 	stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sqlstmt)
 	if SRDBlib.Err != nil {
 		log.Printf("SelectRoomLevel() (3) err=%s\n", SRDBlib.Err.Error())
@@ -1734,7 +1749,7 @@ func SelectRoomLevel(userno int, levelonly int) (roomlevelinf RoomLevelInf, stat
 	lastlevel := 0
 
 	for rows.Next() {
-		SRDBlib.Err = rows.Scan(&roomlevel.User_name, &roomlevel.Genre, &roomlevel.Rank, &roomlevel.Nrank, &roomlevel.Level, &roomlevel.Followers, &roomlevel.ts)
+		SRDBlib.Err = rows.Scan(&roomlevel.User_name, &roomlevel.Genre, &roomlevel.Rank, &roomlevel.Nrank, &roomlevel.Prank, &roomlevel.Level, &roomlevel.Followers, &roomlevel.ts)
 		if SRDBlib.Err != nil {
 			log.Printf("GetCurrentScore() (7) err=%s\n", SRDBlib.Err.Error())
 			status = -7
