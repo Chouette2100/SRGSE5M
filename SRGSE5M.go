@@ -14,6 +14,43 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 
 	※　Intervalが0でないときは、開始時に配信者名リストを出力します。
 
+
+*/
+
+package main
+
+import (
+	"fmt"
+	"log"
+
+	//	. "log"
+	"strconv"
+
+	//	"strings"
+	"time"
+
+	//	"bufio"
+	"io"
+	"os"
+
+	//	"runtime"
+
+	"database/sql"
+
+	_ "github.com/go-sql-driver/mysql"
+
+	//	"encoding/json"
+	//	"net/http"
+	//	"github.com/360EntSecGroup-Skylar/excelize"
+
+	//	. "MyModule/ShowroomCGIlib"
+	"SRGSE5M/GSE5Mlib"
+	"SRGSE5M/SRDBlib"
+
+	"github.com/dustin/go-humanize"
+)
+
+/*
 	EvalPoints2A02 2019/04/30
 		イベントが終わっている、イベント参加をとりやめた、SHOWROOMをやめた、などの対応
 	EvalPoints2A03 2019/06/22
@@ -62,45 +99,13 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 	Ver. 020AL00 最終結果確定時にMakePointPerSlot()を実行する。これにともないSRDBlibを導入する。
 	Ver. 020AM00 できるだけ早く確定情報を取得する。
 	Ver. 020AN00 できるだけ早く確定情報を取得する（フェーズ移行の条件の見直し）
+	Ver. 020AP03 イベント終了時、CopyScore()の前にGetPointsALL()を実行する（DontGetScoreを導入する）
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-package main
-
-import (
-	"fmt"
-	"log"
-
-	//	. "log"
-	"strconv"
-
-	//	"strings"
-	"time"
-
-	//	"bufio"
-	"io"
-	"os"
-
-	//	"runtime"
-
-	"database/sql"
-
-	_ "github.com/go-sql-driver/mysql"
-
-	//	"encoding/json"
-	//	"net/http"
-	//	"github.com/360EntSecGroup-Skylar/excelize"
-
-	//	. "MyModule/ShowroomCGIlib"
-	"SRGSE5M/GSE5Mlib"
-	"SRGSE5M/SRDBlib"
-
-	"github.com/dustin/go-humanize"
-)
-
-const version = "020AN00"
+const version = "020AP03"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -379,13 +384,23 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 	//	wtdp := 2
 	//	delay := time.Duration((wtdp+1)*gschedule.Intervalmin) * time.Minute
 
+	//	timestamp := InsertSampleTimeIntoTimeacqTable()
+	timestamp := time.Now().Truncate(time.Second)
+	if timestamp.After(gschedule.Endtime.Add(time.Duration(gschedule.Intervalmin+1) * time.Minute)) {
+		log.Printf("set rstatus = DontGetScore eventid=%s\n", gschedule.Eventid)
+		sqlstmte := "update event set rstatus = ? where eventid = ?"
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
+
+		if SRDBlib.Err != nil {
+			log.Printf("GetPointsAll() update event err=[%s]\n", SRDBlib.Err.Error())
+		}
+	}
+
 	Length := len(IdList)
 
 	if Length == 0 {
 		return
 	}
-	//	timestamp := InsertSampleTimeIntoTimeacqTable()
-	timestamp := time.Now().Truncate(time.Second)
 
 	var tx *sql.Tx
 	tx, SRDBlib.Err = SRDBlib.Db.Begin()
@@ -468,6 +483,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 						}
 
 					}
+
 				}
 				//	Ver. RU20G4	-----------------------------------------------------------------
 				continue
@@ -1290,10 +1306,10 @@ func GetSchedule() (
 		//	log.Printf("tnow= %s end_date=%s (%s)\n", tnow.Format("2006-01-02 15:04:05"), end_date.Format("2006-01-02 15:04:05"), eventid)
 
 		//	rstatusを書き換えて、終了処理をやり直すことができるように条件を設定してある。
-		if tnow.Before(endtime.Add(1 * time.Minute)) { //	RU20G5
+		if tnow.Before(endtime.Add(time.Duration(gschedule.Intervalmin*2+1)*time.Minute)) || rstatus == "" {
 			//	イベント期間中は獲得ポイントデータを取得する。
 			gschedule.Method = "GetScore"
-		} else if tnow.After(endtime.Add(1 * time.Minute)) && rstatus != "Provisional" {
+		} else if tnow.After(endtime.Add(1*time.Minute)) && rstatus != "Provisional" {
 			//	イベント終了後、最終結果を格納するためのレコードを一回だけ追加する。
 			gschedule.Method = "CopyScore"
 		} else if rstatus == "Provisional" && tnow.After(end_date.Add(660*time.Minute)) {
