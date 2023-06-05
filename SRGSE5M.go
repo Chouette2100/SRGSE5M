@@ -1,3 +1,8 @@
+/*!
+Copyright © 2022 chouette.21.00@gmail.com
+Released under the MIT license
+https://opensource.org/licenses/mit-license.php
+*/
 /*
 指定した時刻に指定したイベント、配信者の獲得ポイントを取得します。
 
