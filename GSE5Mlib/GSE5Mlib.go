@@ -63,11 +63,12 @@ import (
 	0102B0	ルーム情報の取得でエラーが発生したときの処理を追加する。
 	0102C0	SRDBlibを導入したことへ対応する。
 	0102D0	できるだけ早く確定情報を取得する。
+	0102E0	Room_url_keyでプリフィックスの削除を"/"から"/r/"に変更する。
 
 
 */
 
-const Version = "0102D0"
+const Version = "0102E0"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1421,7 +1422,7 @@ func GetEventInfAndRoomList(
 			if inputmode == "file" {
 				ReplaceString = "https://www.showroom-live.com/"
 			} else {
-				ReplaceString = "/"
+				ReplaceString = "/r/"
 			}
 			roominfo.Account = strings.Replace(account, ReplaceString, "", -1)
 
@@ -1459,7 +1460,7 @@ func GetEventInfAndRoomList(
 			return
 		}
 
-		ReplaceString := "/"
+		ReplaceString := "/r/"
 
 		for _, br := range ebr.Block_ranking_list {
 
