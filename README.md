@@ -2,6 +2,8 @@
 
 SHOWROOMのサーバから獲得ポイントのデータを取得してデータベースに格納します。
 
+[『SHOWROOM イベント 獲得ポイント一覧』(4) イベント獲得ポイントの取得](https://zenn.dev/chouette2100/books/d8c28f8ff426b7/viewer/6349f8)
+
 取得の対象となるイベント・配信者、取得の時間間隔等はWebサーバ/CGIで設定します。
 
 [Github - SHOWROOM イベント 獲得ポイント一覧](https://github.com/Chouette2100/SRCGI)
@@ -36,9 +38,9 @@ $ go mod init
 
 $ go mod tidy
 
-$ go build SRGSE5M.go
+$ CGO_ENABLED=0 go build SRGSE5M.go
 
-としてビルドします。
+としてビルドします（CGO_ENABLED=0 は開発環境＝実行環境であれば不要です）
 
 なお、このソースの作成は go version go1.20.4 linux/amd64 で行っていますが、
 Linux,Windows,FreeBSDの最近のバージョンで、コンパイラがgo 1.17以後あたりであれば環境に依存することはないと思います。
