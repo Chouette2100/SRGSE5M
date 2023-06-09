@@ -105,12 +105,13 @@ import (
 	Ver. 020AM00 できるだけ早く確定情報を取得する。
 	Ver. 020AN00 できるだけ早く確定情報を取得する（フェーズ移行の条件の見直し）
 	Ver. 020AP03 イベント終了時、CopyScore()の前にGetPointsALL()を実行する（DontGetScoreを導入する）
+	Ver. 020AP04 ログ出力を減らすため"Dup=%d .... deleted."のログ出力を削除する。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "020AP03"
+const version = "020AP04"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -626,9 +627,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 						DeleteFromPoints(tx, eventid, scoremap[id].ts, id)
 						ptime = ""
 						pstatus = "="
-						//	(*scoremap[id]).Dup += 1
-						//	log.Printf("same data(Dup=True) idx=%d, eventid=%s user_id=%d point=%d deleted.\n", idx, eventid, id, point)
-						log.Printf(" eventid=%s %s Dup=%d %8d%7d %s deleted.\n", eventid, timestamp.Format("15:04:05"), (*scoremap[id]).Dup, point, id, eventid)
+						//	log.Printf(" eventid=%s %s Dup=%d %8d%7d %s deleted.\n", eventid, timestamp.Format("15:04:05"), (*scoremap[id]).Dup, point, id, eventid)
 					}
 					(*scoremap[id]).Dup += 1
 					//	(*scoremap[id]).Sum0 = 0
