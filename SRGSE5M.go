@@ -35,7 +35,7 @@ import (
 	"time"
 
 	//	"bufio"
-	"io"
+	//	"io"
 	"os"
 
 	//	"runtime"
@@ -106,12 +106,16 @@ import (
 	Ver. 020AN00 できるだけ早く確定情報を取得する（フェーズ移行の条件の見直し）
 	Ver. 020AP03 イベント終了時、CopyScore()の前にGetPointsALL()を実行する（DontGetScoreを導入する）
 	Ver. 020AP04 ログ出力を減らすため"Dup=%d .... deleted."のログ出力を削除する。
+	Ver. 020AQ04 最終処理（GetConfirmed()）でeventuserに存在しないルームを補う。ログ出力はファイルのみとする。
+	Ver. 020AQ05 GetPointsAll() での scoremap[i]の存在をチェックするようにする（チェック後の変数dupを使う）
+	Ver. 020AQ06 GetSchedule()でエラーが発生した場合は処理を打ち切る。
+	Ver. 020AQ07 InserIntoOrUpdatePoints()のeventuserに対するselect文のwhereの抜けを補う。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "020AP04"
+const version = "020AQ07"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -320,12 +324,31 @@ func InsertIntoOrUpdatePoints(
 	}
 
 	//	===============================================
-	sqlstmt = "update eventuser set point = ? where eventid = ? and userno = ?"
-	_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, point, eventid, userno)
-
+	nrow = 0
+	sqlstmt = "select count(*) from eventuser where eventid = ? and userno = ?"
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid, userno).Scan(&nrow)
 	if SRDBlib.Err != nil {
-		log.Printf("GetSchedule() update eventuser err=[%s]\n", SRDBlib.Err.Error())
+		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
+	}
+
+	if nrow != 0 {
+		sqlstmt = "update eventuser set point = ? where eventid = ? and userno = ?"
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, point, eventid, userno)
+
+		if SRDBlib.Err != nil {
+			log.Printf("InsertIntoOrUpdatePoints() update eventuser err=[%s]\n", SRDBlib.Err.Error())
+			status = -1
+		}
+
+	} else {
+		sqlstmt = "insert into eventuser (eventid, userno, istarget, iscntrbpoints, graph, color, point) values (?,?,?,?,?,?,?)"
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, eventid, userno, "Y", "N", "Y", "white", point)
+		if SRDBlib.Err != nil {
+			log.Printf("InsertIntoOrUpdatePoints() insert into eventuser err=[%s]\n", SRDBlib.Err.Error())
+			status = -1
+		}
+
 	}
 
 	return
@@ -446,7 +469,8 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 				log.Printf(" eventid=%s timestamp=%v gschedule.Endtime=%v scoremap[id].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
 				if timestamp.After(gschedule.Endtime) {
 					//	イベントが終了している。
-					if scoremap[id].Dup == 0 {
+					//	if scoremap[id].Dup == 0 {	// 該当scoremap[id]が存在しない場合異常終了する。
+					if dup == 0 {
 						//	配信中のイベント終了であるので貢献ランキングを取得する。
 						//	RU20G6 InsertIntoTimeTable(eventid, id, timestamp.Add(15 * time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
 						if cntrblist[i] == "Y" {
@@ -1124,10 +1148,13 @@ func CopyScore(gschedule Gschedule) (status int) {
 
 		//	---------------------------------------------------
 
-		if gtime.Before(gschedule.Endtime.Add(-15 * time.Minute)) {
-			//	最新データ（＝イベント終了直前のデータ）が存在しない。
-			return
-		}
+		//	データ取得プロセスが途中で落ちた場合、イベント終了直前のデータは存在しないので
+		//	下記コメントにした部分が生きていると終了処理は行われないことになってしますのだが...
+		//	
+		//	if gtime.Before(gschedule.Endtime.Add(-15 * time.Minute)) {
+		//		//	最新データ（＝イベント終了直前のデータ）が存在しない。
+		//		return
+		//	}
 
 		stmt, SRDBlib.Err = SRDBlib.Db.Prepare("select user_id, `rank`, point from points where eventid = ? and ts = ?")
 		if SRDBlib.Err != nil {
@@ -1382,8 +1409,8 @@ func main() {
 		panic("cannnot open logfile: " + logfilename + err.Error())
 	}
 	defer logfile.Close()
-	//	log.SetOutput(logfile)
-	log.SetOutput(io.MultiWriter(logfile, os.Stdout))
+	log.SetOutput(logfile)
+	//	log.SetOutput(io.MultiWriter(logfile, os.Stdout))
 
 	log.Printf(" ****************************\n")
 	log.Printf(" GetScoreEvery5Minutes version=%s %s\n", version, GSE5Mlib.Version)
@@ -1418,7 +1445,11 @@ func main() {
 outerloop:
 	for {
 		gschedulelist, status = GetSchedule()
-		fmt.Printf("now=%s t=%s status=%d len=%d\n", time.Now().Format("2006/01/02 15:04:05"), t.Format("2006/01/02 15:04:05"), status, len(gschedulelist))
+		if status != 0 {
+			log.Printf("GetSchedule() status=%d\n", status)
+			return
+		}
+		//	fmt.Printf("now=%s t=%s status=%d len=%d\n", time.Now().Format("2006/01/02 15:04:05"), t.Format("2006/01/02 15:04:05"), status, len(gschedulelist))
 		for {
 			nextsec := 99
 			idx := -1
