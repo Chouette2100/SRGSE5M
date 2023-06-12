@@ -1,4 +1,5 @@
-/*!
+/*
+!
 Copyright © 2022 chouette.21.00@gmail.com
 Released under the MIT license
 https://opensource.org/licenses/mit-license.php
@@ -6,30 +7,27 @@ https://opensource.org/licenses/mit-license.php
 package SRDBlib
 
 import (
-
-
 	"strings"
 
 	"fmt"
 	"log"
 
 	//	"math"
-	"time"
 	"sort"
+	"time"
 
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/dustin/go-humanize"
-
 )
-
 
 /*
 Ver.01AA00	SRDBlib.goを導入する（最終結果確定時にMakePointPerSlot()を実行する、ことが目的）
+Ver.01AA01	MakePointPerSlot()のperslotの変数宣言をループの中に入れる（毎回初期化されるように）
 */
 
-const Version = "01AA00"
+const Version = "01AA01"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -109,7 +107,6 @@ var Colorlist1 []Color = []Color{
 	{"lightpink", "lightpink"},
 }
 
-
 type ColorInf struct {
 	Color      string
 	Colorvalue string
@@ -117,8 +114,6 @@ type ColorInf struct {
 }
 
 type ColorInfList []ColorInf
-
-
 
 type RoomInfo struct {
 	Name      string //	ルーム名のリスト
@@ -157,7 +152,6 @@ type RoomInfo struct {
 
 type RoomInfoList []RoomInfo
 
-
 // sort.Sort()のための関数三つ
 func (r RoomInfoList) Len() int {
 	return len(r)
@@ -184,9 +178,6 @@ func (r RoomInfoList) Less(i, j int) bool {
 	}
 }
 
-
-
-
 type PerSlot struct {
 	Timestart time.Time
 	Dstart    string
@@ -210,7 +201,6 @@ var Event_inf Event_Inf
 
 var Db *sql.DB
 var Err error
-
 
 func SelectEventNoAndName(eventid string) (
 	eventname string,
@@ -288,8 +278,6 @@ func SelectEventInf(eventid string) (eventinf Event_Inf, status int) {
 
 	return
 }
-
-
 
 func SelectEventRoomInfList(
 	eventid string,
@@ -479,7 +467,6 @@ func SelectEventRoomInfList(
 	return
 }
 
-
 func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp *[]int) {
 
 	norow = 0
@@ -646,13 +633,10 @@ func UpdatePointsSetQstatus(
 	return
 }
 
-
-
-
 func MakePointPerSlot(eventid string) (perslotinflist []PerSlotInf, status int) {
 
 	var perslotinf PerSlotInf
-	var event_inf	Event_Inf
+	var event_inf Event_Inf
 
 	status = 0
 
@@ -670,13 +654,13 @@ func MakePointPerSlot(eventid string) (perslotinflist []PerSlotInf, status int) 
 		return
 	}
 
-	var perslot PerSlot
-
 	for i := 0; i < len(roominfolist); i++ {
 
 		if roominfolist[i].Graph != "Checked" {
 			continue
 		}
+
+		var perslot PerSlot
 
 		userid := roominfolist[i].Userno
 
@@ -779,4 +763,3 @@ func MakePointPerSlot(eventid string) (perslotinflist []PerSlotInf, status int) 
 
 	return
 }
-
