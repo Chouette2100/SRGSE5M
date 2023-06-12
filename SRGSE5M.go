@@ -44,8 +44,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	//	"encoding/json"
-	//	"net/http"
+	"encoding/json"
+	"net/http"
 	//	"github.com/360EntSecGroup-Skylar/excelize"
 
 	//	. "MyModule/ShowroomCGIlib"
@@ -110,12 +110,13 @@ import (
 	Ver. 020AQ05 GetPointsAll() での scoremap[i]の存在をチェックするようにする（チェック後の変数dupを使う）
 	Ver. 020AQ06 GetSchedule()でエラーが発生した場合は処理を打ち切る。
 	Ver. 020AQ07 InserIntoOrUpdatePoints()のeventuserに対するselect文のwhereの抜けを補う。
+	Ver. 020AQ08 最終処理でeventuserに存在しないがuserに存在しなければ補う。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "020AQ07"
+const version = "020AQ10"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -275,8 +276,8 @@ func InsertIntoPoints(
 
 func InsertIntoOrUpdatePoints(
 	timestamp time.Time,
-	userno int,
-	point, rank,
+	roominf GSE5Mlib.RoomInfo,
+	rank int,
 	gap int,
 	eventid string,
 	pstatus string,
@@ -291,7 +292,7 @@ func InsertIntoOrUpdatePoints(
 
 	nrow := 0
 	sqlstmt := "select count(*) from points where ts = ? and eventid = ? and user_id= ?"
-	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, timestamp, eventid, userno).Scan(&nrow)
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, timestamp, eventid, roominf.Userno).Scan(&nrow)
 	if SRDBlib.Err != nil {
 		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
@@ -307,7 +308,7 @@ func InsertIntoOrUpdatePoints(
 		defer stmt.Close()
 
 		//	log.Printf("InsertIntoOrUpdatePoints()　row.Exec("InsertIntoOrUpdate",...)\n")
-		_, SRDBlib.Err = stmt.Exec(timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
+		_, SRDBlib.Err = stmt.Exec(timestamp, roominf.Userno, eventid, roominf.Point, rank, gap, pstatus, ptime, qstatus, qtime)
 
 		if SRDBlib.Err != nil {
 			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
@@ -315,7 +316,7 @@ func InsertIntoOrUpdatePoints(
 		}
 	} else {
 		sqlstmt = "update points set point = ?, `rank`=?, gap=?, pstatus=?, ptime =?, qstatus=?, qtime=? where ts=? and eventid=? and user_id=?"
-		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, point, rank, gap, pstatus, ptime, qstatus, qtime, timestamp, eventid, userno)
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, roominf.Point, rank, gap, pstatus, ptime, qstatus, qtime, timestamp, eventid, roominf.Userno)
 
 		if SRDBlib.Err != nil {
 			log.Printf("InsertIntoOrUpdatePoints() update points err=[%s]\n", SRDBlib.Err.Error())
@@ -326,7 +327,7 @@ func InsertIntoOrUpdatePoints(
 	//	===============================================
 	nrow = 0
 	sqlstmt = "select count(*) from eventuser where eventid = ? and userno = ?"
-	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid, userno).Scan(&nrow)
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid, roominf.Userno).Scan(&nrow)
 	if SRDBlib.Err != nil {
 		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
 		status = -1
@@ -334,7 +335,7 @@ func InsertIntoOrUpdatePoints(
 
 	if nrow != 0 {
 		sqlstmt = "update eventuser set point = ? where eventid = ? and userno = ?"
-		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, point, eventid, userno)
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, roominf.Point, eventid, roominf.Userno)
 
 		if SRDBlib.Err != nil {
 			log.Printf("InsertIntoOrUpdatePoints() update eventuser err=[%s]\n", SRDBlib.Err.Error())
@@ -343,13 +344,213 @@ func InsertIntoOrUpdatePoints(
 
 	} else {
 		sqlstmt = "insert into eventuser (eventid, userno, istarget, iscntrbpoints, graph, color, point) values (?,?,?,?,?,?,?)"
-		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, eventid, userno, "Y", "N", "Y", "white", point)
+		_, SRDBlib.Err = SRDBlib.Db.Exec(sqlstmt, eventid, roominf.Userno, "N", "N", "N", "white", roominf.Point)
 		if SRDBlib.Err != nil {
 			log.Printf("InsertIntoOrUpdatePoints() insert into eventuser err=[%s]\n", SRDBlib.Err.Error())
 			status = -1
 		}
-
 	}
+
+	nrow = 0
+	sqlstmt = "select count(*) from user where userno = ?"
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, roominf.Userno).Scan(&nrow)
+	if SRDBlib.Err != nil {
+		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", SRDBlib.Err.Error())
+		status = -1
+	}
+
+	log.Printf("eventid=%s userno=%d nrow=%d\n", eventid, roominf.Userno, nrow)
+
+	if nrow == 0 {
+		log.Printf(" roominf=%v\n", roominf)
+		InsertIntoUser(timestamp, eventid, roominf)
+	}
+
+
+	return
+}
+func InsertIntoUser(tnow time.Time, eventid string, roominf GSE5Mlib.RoomInfo) (status int) {
+
+	status = 0
+
+	userno, _ := strconv.Atoi(roominf.ID)
+	log.Printf("  *** InsertIntoUser() *** userno=%d\n", userno)
+
+
+	log.Printf("insert into user(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n",
+		userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
+
+	sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent)"
+	sql += " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+
+	//	log.Printf("sql=%s\n", sql)
+	stmt, err := SRDBlib.Db.Prepare(sql)
+	if err != nil {
+		log.Printf("InsertIntoUser() error() (INSERT/Prepare) err=%s\n", err.Error())
+		status = -1
+		return
+	}
+	defer stmt.Close()
+
+	lenid := len(roominf.ID)
+	_, err = stmt.Exec(
+		userno,
+		roominf.Account,
+		roominf.Name,
+		//	roominf.ID,
+		roominf.Name,
+		roominf.ID[lenid-2:lenid],
+		roominf.Genre,
+		roominf.Rank,
+		roominf.Nrank,
+		roominf.Prank,
+		roominf.Level,
+		roominf.Followers,
+		tnow,
+		eventid,
+	)
+
+	if err != nil {
+		log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
+		//	status = -2
+		_, err = stmt.Exec(
+			userno,
+			roominf.Account,
+			roominf.Account,
+			roominf.ID,
+			roominf.ID[lenid-2:lenid],
+			roominf.Genre,
+			roominf.Rank,
+			roominf.Nrank,
+			roominf.Prank,
+			roominf.Level,
+			roominf.Followers,
+			tnow,
+			eventid,
+		)
+		if err != nil {
+			log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
+			status = -2
+		}
+	}
+
+	return
+
+}
+func GetRoomInfoByAPI(room_id string) (
+	genre string,
+	rank string,
+	nrank string,
+	prank string,
+	level int,
+	followers int,
+	fans int,
+	fans_lst int,
+	roomname string,
+	roomurlkey string,
+	startedat time.Time,
+	status int,
+) {
+
+	status = 0
+
+	//	https://qiita.com/takeru7584/items/f4ba4c31551204279ed2
+	url := "https://www.showroom-live.com/api/room/profile?room_id=" + room_id
+
+	resp, err := http.Get(url)
+	if err != nil {
+		//	一時的にデータが取得できない。
+		//	resp.Body.Close()
+		//		panic(err)
+		status = -1
+		return
+	}
+	defer resp.Body.Close()
+
+	//	JSONをデコードする。
+	//	次の記事を参考にさせていただいております。
+	//		Go言語でJSONに泣かないためのコーディングパターン
+	//		https://qiita.com/msh5/items/dc524e38073ed8e3831b
+
+	var result interface{}
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&result); err != nil {
+		//	panic(err)
+		status = -2
+		return
+	}
+
+	value, _ := result.(map[string]interface{})["follower_num"].(float64)
+	followers = int(value)
+
+	tnow := time.Now()
+	fans = GetAciveFanByAPI(room_id, tnow.Format("200601"))
+	yy := tnow.Year()
+	mm := tnow.Month() - 1
+	if mm < 0 {
+		yy -= 1
+		mm = 12
+	}
+	fans_lst = GetAciveFanByAPI(room_id, fmt.Sprintf("%04d%02d", yy, mm))
+
+	genre, _ = result.(map[string]interface{})["genre_name"].(string)
+
+	rank, _ = result.(map[string]interface{})["league_label"].(string)
+	ranks, _ := result.(map[string]interface{})["show_rank_subdivided"].(string)
+	rank = rank + " | " + ranks
+
+	value, _ = result.(map[string]interface{})["next_score"].(float64)
+	nrank = humanize.Comma(int64(value))
+	value, _ = result.(map[string]interface{})["prev_score"].(float64)
+	prank = humanize.Comma(int64(value))
+
+	value, _ = result.(map[string]interface{})["room_level"].(float64)
+	level = int(value)
+
+	roomname, _ = result.(map[string]interface{})["room_name"].(string)
+
+	roomurlkey, _ = result.(map[string]interface{})["room_url_key"].(string)
+
+	//	配信開始時刻の取得
+	value, _ = result.(map[string]interface{})["current_live_started_at"].(float64)
+	startedat = time.Unix(int64(value), 0).Truncate(time.Second)
+	//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
+
+	return
+
+}
+
+func GetAciveFanByAPI(room_id string, yyyymm string) (nofan int) {
+
+	nofan = -1
+
+	url := "https://www.showroom-live.com/api/active_fan/room?room_id=" + room_id + "&ym=" + yyyymm
+
+	resp, err := http.Get(url)
+	if err != nil {
+		//	一時的にデータが取得できない。
+		//	resp.Body.Close()
+		//		panic(err)
+		nofan = -1
+		return
+	}
+	defer resp.Body.Close()
+
+	//	JSONをデコードする。
+	//	次の記事を参考にさせていただいております。
+	//		Go言語でJSONに泣かないためのコーディングパターン
+	//		https://qiita.com/msh5/items/dc524e38073ed8e3831b
+
+	var result interface{}
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&result); err != nil {
+		//	panic(err)
+		nofan = -2
+		return
+	}
+
+	value, _ := result.(map[string]interface{})["total_user_count"].(float64)
+	nofan = int(value)
 
 	return
 }
@@ -1150,7 +1351,7 @@ func CopyScore(gschedule Gschedule) (status int) {
 
 		//	データ取得プロセスが途中で落ちた場合、イベント終了直前のデータは存在しないので
 		//	下記コメントにした部分が生きていると終了処理は行われないことになってしますのだが...
-		//	
+		//
 		//	if gtime.Before(gschedule.Endtime.Add(-15 * time.Minute)) {
 		//		//	最新データ（＝イベント終了直前のデータ）が存在しない。
 		//		return
@@ -1194,7 +1395,10 @@ func CopyScore(gschedule Gschedule) (status int) {
 		}
 
 		for _, score = range scorelist {
-			InsertIntoOrUpdatePoints(svtime, score.Userno, score.Point, score.Rank, 0, eventid, "Prov.", "", "", "")
+			var roominf GSE5Mlib.RoomInfo
+			roominf.Userno = score.Userno
+			roominf.Point = score.Point
+			InsertIntoOrUpdatePoints(svtime, roominf, score.Rank, 0, eventid, "Prov.", "", "", "")
 			/*
 				_, iscntrbpoint, _ := SelectIstargetAndIiscntrbpoint(eventid, score.Userno)
 				if iscntrbpoint == "Y" {
@@ -1249,7 +1453,8 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 		//	log.Printf(" i+1=%d, userno=%d, point=%d\n", i+1, roominf.Userno, roominf.Point)
 		if roominf.Point > 0 {
 			//	最終獲得ポイントが発表された場合のみ更新する
-			InsertIntoOrUpdatePoints(svtime, roominf.Userno, roominf.Point, i+1, 0, eventid, "Conf.", "", "", "")
+			//	InsertIntoOrUpdatePoints(svtime, roominf.Userno, roominf.Point, i+1, 0, eventid, "Conf.", "", "", "")
+			InsertIntoOrUpdatePoints(svtime, roominf, i+1, 0, eventid, "Conf.", "", "", "")
 			isconfirm = true
 		}
 	}
