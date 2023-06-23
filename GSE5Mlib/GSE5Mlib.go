@@ -68,11 +68,12 @@ import (
 	0102E2	InsertIntoOrUpdateUser():stmt: = DB.Prepare()でのエラーに対してエラー処理の中でstmt.Close()を行う。
 	0102F0	InsertIntoOrUpdateUsers():stmtを関数内ローカル変数としてClose()のタイミングを明確にする。
 	0102F3	InsertIntoOrUpdateUsers():userhitoryのInsertで引数の数を合わせる。
+	0102F4	InsertIntoOrUpdateUser() stmtを使うところをそれぞれ別の変数にする。
 
 
 */
 
-const Version = "0102F3"
+const Version = "0102F4"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1024,7 +1025,7 @@ func InsertRoomInf(eventid string, roominfolist *RoomInfoList) {
 
 func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (status int) {
 
-	var stmt *sql.Stmt
+	var stmt1, stmt2, stmt3 *sql.Stmt
 
 	status = 0
 
@@ -1059,16 +1060,16 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
 		//	log.Printf("sql=%s\n", sql)
-		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+		stmt1, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
 		if SRDBlib.Err != nil {
 			log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", SRDBlib.Err.Error())
 			status = -1
 			return
 		}
-		defer stmt.Close()
+		defer stmt1.Close()
 
 		lenid := len(roominf.ID)
-		_, SRDBlib.Err = stmt.Exec(
+		_, SRDBlib.Err = stmt1.Exec(
 			userno,
 			roominf.Account,
 			roominf.Name,
@@ -1087,7 +1088,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		if SRDBlib.Err != nil {
 			log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", SRDBlib.Err.Error())
 			//	status = -2
-			_, SRDBlib.Err = stmt.Exec(
+			_, SRDBlib.Err = stmt1.Exec(
 				userno,
 				roominf.Account,
 				roominf.Account,
@@ -1140,17 +1141,16 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			sql += "currentevent=? "
 			sql += "where userno=?"
 
-			stmt.Close()
-			stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+			stmt2, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
 
 			if SRDBlib.Err != nil {
 				log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", SRDBlib.Err.Error())
 				status = -1
 				return
 			}
-			//	defer stmt.Close()
+			defer stmt2.Close()
 
-			_, SRDBlib.Err = stmt.Exec(
+			_, SRDBlib.Err = stmt2.Exec(
 				roominf.Account,
 				roominf.Name,
 				roominf.Genre,
@@ -1175,17 +1175,16 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 	if isnew {
 		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
 		//	log.Printf("sql=%s\n", sql)
-		stmt.Close()
-		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+		stmt3, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
 		if SRDBlib.Err != nil {
 			log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", SRDBlib.Err.Error())
 			status = -1
-			stmt.Close()
+			stmt3.Close()
 			return
 		}
-		//	defer stmt.Close()
+		defer stmt3.Close()
 
-		_, SRDBlib.Err = stmt.Exec(
+		_, SRDBlib.Err = stmt3.Exec(
 			userno,
 			roominf.Name,
 			roominf.Genre,
@@ -1200,7 +1199,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		if SRDBlib.Err != nil {
 			log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", SRDBlib.Err.Error())
 			//	status = -2
-			_, SRDBlib.Err = stmt.Exec(
+			_, SRDBlib.Err = stmt3.Exec(
 				userno,
 				roominf.Account,
 				roominf.Genre,

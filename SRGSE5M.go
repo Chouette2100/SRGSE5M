@@ -111,12 +111,13 @@ import (
 	Ver. 020AQ06 GetSchedule()でエラーが発生した場合は処理を打ち切る。
 	Ver. 020AQ07 InserIntoOrUpdatePoints()のeventuserに対するselect文のwhereの抜けを補う。
 	Ver. 020AQ08 最終処理でeventuserに存在しないがuserに存在しなければ補う。
+	Ver. 020AQ11 データがなくmax(ts) from pointsがnullとなった場合はその旨出力して後続の処理を行わない。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "020AQ10"
+const version = "020AQ11"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1333,11 +1334,21 @@ func CopyScore(gschedule Gschedule) (status int) {
 			return
 		}
 	*/
+	//	var gtime time.Time
+	var nullgtime sql.NullTime
 	var gtime time.Time
 	sqlstmt := "select distinct max(ts) from points where eventid = ?"
-	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid).Scan(&gtime)
+	SRDBlib.Err = SRDBlib.Db.QueryRow(sqlstmt, eventid).Scan(&nullgtime)
 	if SRDBlib.Err != nil {
 		log.Printf("CopyScore() (4) err=%s\n", SRDBlib.Err.Error())
+		status = -4
+		return
+	}
+	if nullgtime.Valid {
+		gtime = nullgtime.Time
+	} else {
+		//	データが存在しないイベントの場合
+		log.Printf("CopyScore() (4) gtime is null.\no")
 		status = -4
 		return
 	}
