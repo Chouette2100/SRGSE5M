@@ -23,11 +23,12 @@ import (
 )
 
 /*
-Ver.01AA00	SRDBlib.goを導入する（最終結果確定時にMakePointPerSlot()を実行する、ことが目的）
-Ver.01AA01	MakePointPerSlot()のperslotの変数宣言をループの中に入れる（毎回初期化されるように）
+01AA00	SRDBlib.goを導入する（最終結果確定時にMakePointPerSlot()を実行する、ことが目的）
+01AA01	MakePointPerSlot()のperslotの変数宣言をループの中に入れる（毎回初期化されるように）
+01AB00	stmtを使いまわしたとき、2回目の前にstmt.Close()を行う。
 */
 
-const Version = "01AA01"
+const Version = "01AB00"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -493,6 +494,8 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 
 	//	----------------------------------------------------
 
+	stmt1.Close()
+
 	//	stmt1, err = Db.Prepare("SELECT max(t.t) FROM timeacq t join points p where t.idx=p.idx and user_id = ? and event_id = ?")
 	stmt1, err = Db.Prepare("SELECT max(ts) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
@@ -501,7 +504,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 		//	status = -1
 		return
 	}
-	defer stmt1.Close()
+	//	defer stmt1.Close()
 
 	var tfinal time.Time
 	err = stmt1.QueryRow(userno, eventid).Scan(&tfinal)

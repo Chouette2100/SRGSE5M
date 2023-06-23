@@ -65,11 +65,13 @@ import (
 	0102D0	できるだけ早く確定情報を取得する。
 	0102E0	Room_url_keyでプリフィックスの削除を"/"から"/r/"に変更する。
 	0102E1	aprev_score(prank)の抜けを補う。
+	0102E2	InsertIntoOrUpdateUser():stmt: = DB.Prepare()でのエラーに対してエラー処理の中でstmt.Close()を行う。
+	0102F0	InsertIntoOrUpdateUsers():stmtを関数内ローカル変数としてClose()のタイミングを明確にする。
 
 
 */
 
-const Version = "0102E1"
+const Version = "0102F0"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1021,6 +1023,8 @@ func InsertRoomInf(eventid string, roominfolist *RoomInfoList) {
 
 func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (status int) {
 
+	var stmt *sql.Stmt
+
 	status = 0
 
 	isnew := false
@@ -1049,21 +1053,21 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 
 		isnew = true
 
-		log.Printf("insert into userhistory(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n", userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
+		log.Printf("insert into user(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n", userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
 
-		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
+		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
 		//	log.Printf("sql=%s\n", sql)
-		stmt, err := SRDBlib.Db.Prepare(sql)
-		if err != nil {
-			log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", err.Error())
+		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+		if SRDBlib.Err != nil {
+			log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", SRDBlib.Err.Error())
 			status = -1
 			return
 		}
 		defer stmt.Close()
 
 		lenid := len(roominf.ID)
-		_, err = stmt.Exec(
+		_, SRDBlib.Err = stmt.Exec(
 			userno,
 			roominf.Account,
 			roominf.Name,
@@ -1079,10 +1083,10 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			eventid,
 		)
 
-		if err != nil {
-			log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
+		if SRDBlib.Err != nil {
+			log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", SRDBlib.Err.Error())
 			//	status = -2
-			_, err = stmt.Exec(
+			_, SRDBlib.Err = stmt.Exec(
 				userno,
 				roominf.Account,
 				roominf.Account,
@@ -1097,17 +1101,17 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				tnow,
 				eventid,
 			)
-			if err != nil {
-				log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
+			if SRDBlib.Err != nil {
+				log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", SRDBlib.Err.Error())
 				status = -2
 			}
 		}
 	} else {
 
 		sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
-		err = SRDBlib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
-		if err != nil {
-			log.Printf("err=[%s]\n", err.Error())
+		SRDBlib.Err = SRDBlib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
+		if SRDBlib.Err != nil {
+			log.Printf("err=[%s]\n", SRDBlib.Err.Error())
 			status = -1
 		}
 		//	log.Printf("current userno=%d name=%s, nrank=%s, level=%d, followers=%d\n", userno, name, nrank, level, followers)
@@ -1121,7 +1125,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 
 			isnew = true
 
-			log.Printf("insert into userhistory(*changed*) userno=%d level=%d, followers=%d\n", userno, roominf.Level, roominf.Followers)
+			log.Printf("insert into user(*changed*) userno=%d level=%d, followers=%d\n", userno, roominf.Level, roominf.Followers)
 
 			sql := "update user set userid=?,"
 			sql += "user_name=?,"
@@ -1134,16 +1138,18 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			sql += "ts=?,"
 			sql += "currentevent=? "
 			sql += "where userno=?"
-			stmt, err := SRDBlib.Db.Prepare(sql)
 
-			if err != nil {
-				log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", err.Error())
+			stmt.Close()
+			stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+
+			if SRDBlib.Err != nil {
+				log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", SRDBlib.Err.Error())
 				status = -1
 				return
 			}
-			defer stmt.Close()
+			//	defer stmt.Close()
 
-			_, err = stmt.Exec(
+			_, SRDBlib.Err = stmt.Exec(
 				roominf.Account,
 				roominf.Name,
 				roominf.Genre,
@@ -1157,8 +1163,8 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				roominf.ID,
 			)
 
-			if err != nil {
-				log.Printf("error(InsertIntoOrUpdateUser() Update/Exec) err=%s\n", err.Error())
+			if SRDBlib.Err != nil {
+				log.Printf("error(InsertIntoOrUpdateUser() Update/Exec) err=%s\n", SRDBlib.Err.Error())
 				status = -2
 			}
 		}
@@ -1168,15 +1174,17 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 	if isnew {
 		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?)"
 		//	log.Printf("sql=%s\n", sql)
-		stmt, err := SRDBlib.Db.Prepare(sql)
-		if err != nil {
-			log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", err.Error())
+		stmt.Close()
+		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
+		if SRDBlib.Err != nil {
+			log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", SRDBlib.Err.Error())
 			status = -1
+			stmt.Close()
 			return
 		}
-		defer stmt.Close()
+		//	defer stmt.Close()
 
-		_, err = stmt.Exec(
+		_, SRDBlib.Err = stmt.Exec(
 			userno,
 			roominf.Name,
 			roominf.Genre,
@@ -1188,10 +1196,10 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 			tnow,
 		)
 
-		if err != nil {
-			log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", err.Error())
+		if SRDBlib.Err != nil {
+			log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", SRDBlib.Err.Error())
 			//	status = -2
-			_, err = stmt.Exec(
+			_, SRDBlib.Err = stmt.Exec(
 				userno,
 				roominf.Account,
 				roominf.Genre,
@@ -1202,8 +1210,8 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				roominf.Followers,
 				tnow,
 			)
-			if err != nil {
-				log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", err.Error())
+			if SRDBlib.Err != nil {
+				log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", SRDBlib.Err.Error())
 				status = -2
 			}
 		}
