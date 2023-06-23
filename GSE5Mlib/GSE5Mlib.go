@@ -67,11 +67,12 @@ import (
 	0102E1	aprev_score(prank)の抜けを補う。
 	0102E2	InsertIntoOrUpdateUser():stmt: = DB.Prepare()でのエラーに対してエラー処理の中でstmt.Close()を行う。
 	0102F0	InsertIntoOrUpdateUsers():stmtを関数内ローカル変数としてClose()のタイミングを明確にする。
+	0102F3	InsertIntoOrUpdateUsers():userhitoryのInsertで引数の数を合わせる。
 
 
 */
 
-const Version = "0102F0"
+const Version = "0102F3"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1172,7 +1173,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 	}
 
 	if isnew {
-		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?)"
+		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
 		//	log.Printf("sql=%s\n", sql)
 		stmt.Close()
 		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sql)
