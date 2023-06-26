@@ -112,12 +112,13 @@ import (
 	Ver. 020AQ07 InserIntoOrUpdatePoints()のeventuserに対するselect文のwhereの抜けを補う。
 	Ver. 020AQ08 最終処理でeventuserに存在しないがuserに存在しなければ補う。
 	Ver. 020AQ11 データがなくmax(ts) from pointsがnullとなった場合はその旨出力して後続の処理を行わない。
+	Ver. 020AR00 Intervalminが0のときは5とする。Intervaminが0だと剰余を求めるときゼロ割りが起きる。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "020AQ11"
+const version = "020AR00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1596,10 +1597,13 @@ func GetSchedule() (
 
 		sqlstmt := "select intervalmin, modmin, modsec from event where eventid = ?"
 		Err = SRDBlib.Db.QueryRow(sqlstmt, gschedulelist[i].Eventid).Scan(&gschedulelist[i].Intervalmin, &gschedulelist[i].Modmin, &gschedulelist[i].Modsec)
-
 		if Err != nil {
 			log.Printf("GetSchedule() select err=[%s]\n", Err.Error())
 			status = -1
+		}
+		if gschedulelist[i].Intervalmin == 0 {
+			//	Intervaminが0だと剰余を求めるときゼロ割りが起きる。
+			gschedulelist[i].Intervalmin = 5
 		}
 
 	}
