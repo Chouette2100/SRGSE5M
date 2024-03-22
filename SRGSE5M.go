@@ -53,6 +53,8 @@ import (
 	"SRGSE5M/SRDBlib"
 
 	"github.com/dustin/go-humanize"
+
+	"github.com/chouette2100/srapi"
 )
 
 /*
@@ -113,12 +115,13 @@ import (
 	Ver. 020AQ08 最終処理でeventuserに存在しないがuserに存在しなければ補う。
 	Ver. 020AQ11 データがなくmax(ts) from pointsがnullとなった場合はその旨出力して後続の処理を行わない。
 	Ver. 020AR00 Intervalminが0のときは5とする。Intervaminが0だと剰余を求めるときゼロ割りが起きる。
+	Ver. 030AA00 獲得ポイントの取得にsrapi.ApiEventsRanking()を使用するための準備をする。
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "020AR00"
+const version = "030AA00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -368,7 +371,6 @@ func InsertIntoOrUpdatePoints(
 		InsertIntoUser(timestamp, eventid, roominf)
 	}
 
-
 	return
 }
 func InsertIntoUser(tnow time.Time, eventid string, roominf GSE5Mlib.RoomInfo) (status int) {
@@ -377,7 +379,6 @@ func InsertIntoUser(tnow time.Time, eventid string, roominf GSE5Mlib.RoomInfo) (
 
 	userno, _ := strconv.Atoi(roominf.ID)
 	log.Printf("  *** InsertIntoUser() *** userno=%d\n", userno)
-
 
 	log.Printf("insert into user(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n",
 		userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
@@ -609,7 +610,7 @@ func InsertIntoTimeTable(
 /*
 配信者のリストからそれぞれの獲得ポイントなどを取得する。
 */
-func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (status int) {
+func GetPointsAll(gschedule Gschedule, proomlist *[]RoomData) (status int) {
 
 	status = 0
 
@@ -628,7 +629,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 		}
 	}
 
-	Length := len(IdList)
+	Length := len(*proomlist)
 
 	if Length == 0 {
 		return
@@ -647,7 +648,8 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 	for i := 0; i < Length; i++ {
 
 		//	var makePQ func()
-		id, _ := strconv.Atoi(IdList[i])
+		sid := (*proomlist)[i].id
+		id, _ := strconv.Atoi(sid)
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
 		point := 0
@@ -660,7 +662,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 
 		if !gschedule.Beforestart {
 			//	開催されているイベント
-			point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
+			point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(sid)
 			if eventid != gschedule.Eventid {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
@@ -676,7 +678,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 					if dup == 0 {
 						//	配信中のイベント終了であるので貢献ランキングを取得する。
 						//	RU20G6 InsertIntoTimeTable(eventid, id, timestamp.Add(15 * time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
-						if cntrblist[i] == "Y" {
+						if (*proomlist)[i].iscntrb == "Y" {
 							//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
 							InsertIntoTimeTable(gschedule.Eventid, id, timestamp.Add(15*time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
 							scoremap[id].Dup = -1
@@ -721,7 +723,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 				//	Ver. RU20G4	-----------------------------------------------------------------
 				continue
 			}
-			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(IdList[i])
+			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(sid)
 			if _, ok := scoremap[id]; ok {
 				if isonlive {
 					scoremap[id].NoOffline = 0
@@ -821,7 +823,7 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 
 						(*scoremap[id]).Continued = 0
 
-						if cntrblist[i] == "Y" {
+						if (*proomlist)[i].iscntrb == "Y" {
 							//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
 							if (*scoremap[id]).Sum0 != 0 {
 								//	配信がされていないときに順位が変わったケースは除く
@@ -1219,13 +1221,54 @@ func MakeComment() (status int) {
 	return
 }
 
-/*
-	各配信者さんの獲得ポイントのリストを作る（ファイルに追記する）
-	ファイルは獲得ポイントを横並びにしたものと、各配信者さんの順位、獲得ポイント、
-*/
+type RoomData struct {
+	Id      string
+	Point   int
+	Rank    int
+	Gap     int
+	Iscntrb string
+	Eventid string
+}
 
-func ScanActive(gschedule Gschedule) (status int) {
+func GetUserlistFromApi(
+	client *http.Client,
+	gschedule Gschedule,
+	) (
+	proomlist *[]RoomData,
+	status int,
+) {
+	status = 0
 
+	var roomdata RoomData
+
+
+	pranking, err := srapi.ApiEventsRanking(client, gschedule.Ieventid, roomid, blockid)
+	if err != nil {
+		log.Printf("GetUserlistFromApi() err=%s\n", err.Error())
+		status = -1
+		return
+	}
+
+	roomlist := make([]RoomData, len(pranking.Ranking))
+	
+	for i := 0; i < len(pranking.Ranking); i++ {
+	roomdata.Eventid = gschedule.Eventid
+	roomdata.Id =fmt.Sprintf("%d",pranking.Ranking[i].Room.RoomID)
+
+
+	roomlist = append(roomlist, roomdata)
+	}
+
+	return
+}
+
+func GetUserlistFromDB(gschedule Gschedule) (
+	proomlist *[]RoomData,
+	status int,
+) {
+	status = 0
+
+	var roomdata RoomData
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
@@ -1246,8 +1289,7 @@ func ScanActive(gschedule Gschedule) (status int) {
 	}
 	defer rows.Close()
 
-	idlist := make([]string, 0)
-	cntrblist := make([]string, 0)
+	roomlist := make([]RoomData, 0)
 	userno := 0
 
 	iscntrb := "N"
@@ -1260,8 +1302,10 @@ func ScanActive(gschedule Gschedule) (status int) {
 			return
 		}
 
-		idlist = append(idlist, fmt.Sprintf("%d", userno))
-		cntrblist = append(cntrblist, iscntrb)
+		roomdata.id = fmt.Sprintf("%d", userno)
+		roomdata.iscntrb = iscntrb
+
+		roomlist = append(roomlist, roomdata)
 
 	}
 
@@ -1271,10 +1315,75 @@ func ScanActive(gschedule Gschedule) (status int) {
 		return
 	}
 
+	proomlist = &roomlist
+
+	return
+
+}
+
+/*
+	各配信者さんの獲得ポイントのリストを作る（ファイルに追記する）
+	ファイルは獲得ポイントを横並びにしたものと、各配信者さんの順位、獲得ポイント、
+*/
+
+func ScanActive(gschedule Gschedule) (status int) {
+
+	/*
+		var stmt *sql.Stmt
+		var rows *sql.Rows
+
+		sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
+		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sqlstmt)
+		if SRDBlib.Err != nil {
+			log.Printf("ScanActive() Prepare() err=%s\n", SRDBlib.Err.Error())
+			status = -5
+			return
+		}
+		defer stmt.Close()
+
+		rows, SRDBlib.Err = stmt.Query(gschedule.Eventid)
+		if SRDBlib.Err != nil {
+			log.Printf("ScanActive() Query() (6) err=%s\n", SRDBlib.Err.Error())
+			status = -6
+			return
+		}
+		defer rows.Close()
+
+		idlist := make([]string, 0)
+		cntrblist := make([]string, 0)
+		userno := 0
+
+		iscntrb := "N"
+		for rows.Next() {
+			Err := rows.Scan(&userno, &iscntrb)
+
+			if Err != nil {
+				log.Printf("ScanActive() Scan() err=%s\n", Err.Error())
+				status = -7
+				return
+			}
+
+			idlist = append(idlist, fmt.Sprintf("%d", userno))
+			cntrblist = append(cntrblist, iscntrb)
+
+		}
+
+		if SRDBlib.Err = rows.Err(); SRDBlib.Err != nil {
+			log.Printf("ScanActive() rows err=%s\n", SRDBlib.Err.Error())
+			status = -8
+			return
+		}
+	*/
+
+	proomlist, status := GetUserlistFromDB(gschedule)
+	if status != 0 {
+		return
+	}
+
 	//	log.Println("ScanActive() idlist=", idlist)
-	if len(idlist) != 0 {
+	if len(*proomlist) != 0 {
 		//	status = GetPointsAll(idlist, gschedule, cntrblist)
-		go GetPointsAll(idlist, gschedule, cntrblist)
+		go GetPointsAll(gschedule, proomlist)
 	}
 
 	return
