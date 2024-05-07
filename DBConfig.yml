@@ -1,0 +1,30 @@
+## DBサーバーのホスト名、指定しなければlocalhost
+#DBhost:
+#
+#DBport:
+
+
+# データベース名
+DBname: ${DBNAME}
+#
+#
+# ログイン名とパスワードは環境変数で渡す
+DBuser: ${DBUSER}
+DBpswd: ${DBPW}
+
+# SSH接続を使うか否か
+UseSSH: false
+
+#UseSSH: true
+#SSHhost: ${SSHHOST}
+#SSHport: ${SSHPORT}
+#SSHuser: ${SSHUSER}
+##SSHprvkey: ${SSHKEY}
+##SSHpswd: ${SSHPSWD}
+
+SSHhost: 133.18.233.43
+SSHport: 8022
+SSHuser: chouette
+#SSHpswd:
+SSHprvkey: /home/chouette/.ssh/id_ed25519
+
