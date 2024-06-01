@@ -118,13 +118,14 @@ import (
 	Ver. 020AQ11 データがなくmax(ts) from pointsがnullとなった場合はその旨出力して後続の処理を行わない。
 	Ver. 020AR00 Intervalminが0のときは5とする。Intervaminが0だと剰余を求めるときゼロ割りが起きる。
 	Ver. 021AA00 gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
+	Ver. 021AB00 2時間ごとのuserテーブルの更新を停止する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AA00"
+const version = "021AB00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1685,7 +1686,8 @@ func main() {
 
 	var gschedulelist Gschedulelist
 
-	hh, _, ss := time.Now().Clock()
+	//	hh, _, ss := time.Now().Clock()
+	_, _, ss := time.Now().Clock()
 	if ss != 0 {
 		time.Sleep(time.Duration(61-ss) * time.Second)
 	}
@@ -1722,7 +1724,8 @@ func main() {
 			}
 
 			if idx > -1 {
-				hh, mm, ss = time.Now().Clock()
+				//	hh, mm, ss = time.Now().Clock()
+				_, mm, ss = time.Now().Clock()
 				if ss < nextsec {
 					time.Sleep(time.Duration(nextsec-ss) * time.Second)
 				}
@@ -1741,18 +1744,21 @@ func main() {
 			}
 		}
 
+		/*
 		//	毎日偶数時 5分に特定ユーザーのユーザー情報を取得する
 		//	レベルやフォロワー数の推移を記録する
 		//	if hh%6 == 3 && mm == 1 {
 		if hh%2 == 0 && mm == 5 {
 			GSE5Mlib.GetUserInfForHistory()
 		}
+		*/
 
 		//	毎分00秒になるまで待つ
 		_, _, ss = time.Now().Clock()
 		time.Sleep(time.Duration(61-ss) * time.Second)
 		//	t = time.Now()
-		hh, mm, _ = time.Now().Clock()
+		//	hh, mm, _ = time.Now().Clock()
+		_, mm, _ = time.Now().Clock()
 		hh24 := mm
 		if hh24 == 0 {
 			hh24 = 24
