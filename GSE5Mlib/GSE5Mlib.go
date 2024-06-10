@@ -71,11 +71,12 @@ import (
 	0102F3	InsertIntoOrUpdateUsers():userhitoryのInsertで引数の数を合わせる。
 	0102F4	InsertIntoOrUpdateUser() stmtを使うところをそれぞれ別の変数にする。
 	021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
+	021AB00	userのupdate、userhistoryのinsert/updateをやめる。userのinsertはsrdblib.InsertIntoUser()を使う。
 
 
 */
 
-const Version = "021AA00"
+const Version = "021AB00"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -389,6 +390,8 @@ func GetSerialFromYymmddHhmmss(yymmdd, hhmmss string) (tserial float64) {
 	return
 }
 
+/*
+
 func GetUserInfForHistory() (status int) {
 
 	status = 0
@@ -458,6 +461,7 @@ func GetUserInfForHistory() (status int) {
 
 	return
 }
+*/
 
 func GetEventListByAPI(eventinflist *[]Event_Inf) (status int) {
 
@@ -1005,6 +1009,7 @@ func UpdateEventInf(eventinf *Event_Inf) (
 	return
 }
 
+/*
 func InsertRoomInf(eventid string, roominfolist *RoomInfoList) {
 
 	log.Printf("***** InsertRoomInf() ***********  NoRoom=%d\n", len(*roominfolist))
@@ -1026,14 +1031,17 @@ func InsertRoomInf(eventid string, roominfolist *RoomInfoList) {
 	}
 	log.Printf("***** end of InsertRoomInf() ***********\n")
 }
+*/
 
-func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (status int) {
+func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string, roominf RoomInfo) (status int) {
 
+	/*
 	var stmt1, stmt2, stmt3 *sql.Stmt
+	*/
 
 	status = 0
 
-	isnew := false
+	//	isnew := false
 
 	userno, _ := strconv.Atoi(roominf.ID)
 	log.Printf("  *** InsertIntoOrUpdateUser() *** userno=%d\n", userno)
@@ -1047,6 +1055,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		return
 	}
 
+	/*
 	name := ""
 	genre := ""
 	rank := ""
@@ -1054,12 +1063,17 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 	prank := ""
 	level := 0
 	followers := 0
+	*/
 
 	if nrow == 0 {
 
-		isnew = true
+		srdblib.InsertIntoUser(client, tnow, userno)
+
+		//	isnew = true
 
 		log.Printf("insert into user(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n", userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
+
+		/*
 
 		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
@@ -1112,6 +1126,9 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 				status = -2
 			}
 		}
+		*/
+	}
+	/*
 	} else {
 
 		sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
@@ -1175,7 +1192,9 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		}
 
 	}
+	*/
 
+	/*
 	if isnew {
 		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
 		//	log.Printf("sql=%s\n", sql)
@@ -1221,6 +1240,7 @@ func InsertIntoOrUpdateUser(tnow time.Time, eventid string, roominf RoomInfo) (s
 		}
 
 	}
+	*/
 
 	return
 
