@@ -27,27 +27,25 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
+	"time"
+	"os"
 
 	//	. "log"
-	"strconv"
-
-	//	"strings"
-	"time"
-
 	//	"bufio"
 	//	"io"
-	"os"
 
 	//	"runtime"
 
-	"database/sql"
+	"net/http"
 
+	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/go-gorp/gorp"
 
 	//	"encoding/json"
-	//	"net/http"
 	//	"github.com/360EntSecGroup-Skylar/excelize"
 
 	//	. "MyModule/ShowroomCGIlib"
@@ -57,6 +55,7 @@ import (
 	"github.com/dustin/go-humanize"
 
 	"github.com/Chouette2100/srdblib"
+	"github.com/Chouette2100/exsrapi"
 )
 
 /*
@@ -119,13 +118,14 @@ import (
 	Ver. 020AR00 Intervalminが0のときは5とする。Intervaminが0だと剰余を求めるときゼロ割りが起きる。
 	Ver. 021AA00 gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 	Ver. 021AB00 2時間ごとのuserテーブルの更新を停止する。
+	Ver. 021AC00 50位以内のルームの獲得ポイントの取得にはGetEventsRankingByApi()を使う。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AB00"
+const version = "021AC00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -617,7 +617,7 @@ func InsertIntoTimeTable(
 /*
 配信者のリストからそれぞれの獲得ポイントなどを取得する。
 */
-func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (status int) {
+func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cntrblist []string) (status int) {
 
 	status = 0
 
@@ -640,6 +640,16 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 
 	if Length == 0 {
 		return
+	}
+
+	pranking, err := srdblib.GetEventsRankingByApi(client, gschedule.Eventid)
+	if err != nil {
+		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
+		return -1
+	}
+	pmap := make(map[int]int)
+	for i, ranking := range(pranking.Ranking) {
+			pmap[ranking.Room.RoomID] = i
 	}
 
 	var tx *sql.Tx
@@ -668,11 +678,20 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 
 		if !gschedule.Beforestart {
 			//	開催されているイベント
-			point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
-			if eventid != gschedule.Eventid {
+			uno, _ := strconv.Atoi(IdList[i])
+			if idx, ok := pmap[uno]; ok {
+				point = pranking.Ranking[idx].Point
+				rank = pranking.Ranking[idx].Rank
+				gap = -1
+				eventid = gschedule.Eventid
+			} else {
+				point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
+			}
+			// if eventid != gschedule.Eventid {
+			if ! strings.Contains(eventid, gschedule.Eventid) {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
-				log.Printf(" eventid=%s isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
+				log.Printf(" eventid=(%s) isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
 				dup := -9
 				if _, ok := scoremap[id]; ok {
 					dup = scoremap[id].Dup
@@ -728,6 +747,12 @@ func GetPointsAll(IdList []string, gschedule Gschedule, cntrblist []string) (sta
 				}
 				//	Ver. RU20G4	-----------------------------------------------------------------
 				continue
+			} else {
+				if eventid != gschedule.Eventid {
+					eventid = gschedule.Eventid
+					rank = 0
+				}
+				
 			}
 			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(IdList[i])
 			if _, ok := scoremap[id]; ok {
@@ -1117,7 +1142,7 @@ func MakeComment() (status int) {
 
 	status = 0
 
-	var userno [11]int
+	//	var userno [11]int
 	var shortname [11]string
 	var point [11]int
 	var idxtid int
@@ -1150,7 +1175,7 @@ func MakeComment() (status int) {
 		if id == tid {
 			idxtid = idx
 		}
-		userno[idx] = id
+		//	userno[idx] = id
 		if sn, ok := snmap[id]; ok {
 			shortname[idx] = sn
 		} else {
@@ -1232,7 +1257,7 @@ func MakeComment() (status int) {
 	ファイルは獲得ポイントを横並びにしたものと、各配信者さんの順位、獲得ポイント、
 */
 
-func ScanActive(gschedule Gschedule) (status int) {
+func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 
 	var stmt *sql.Stmt
 	var rows *sql.Rows
@@ -1282,7 +1307,7 @@ func ScanActive(gschedule Gschedule) (status int) {
 	//	log.Println("ScanActive() idlist=", idlist)
 	if len(idlist) != 0 {
 		//	status = GetPointsAll(idlist, gschedule, cntrblist)
-		go GetPointsAll(idlist, gschedule, cntrblist)
+		go GetPointsAll(client, idlist, gschedule, cntrblist)
 	}
 
 	return
@@ -1682,6 +1707,22 @@ func main() {
 	srdblib.Dbmap.AddTableWithName(srdblib.User{}, "user").SetKeys(false, "Userno")
 	srdblib.Dbmap.AddTableWithName(srdblib.Points{}, "points").SetKeys(false, "Eventid", "User_id", "Ts")
 
+	//	srdblib.Dbmap.AddTableWithName(srdblib.Wuser{}, "wuser").SetKeys(false, "Userno")
+	//	srdblib.Dbmap.AddTableWithName(srdblib.Userhistory{}, "wuserhistory").SetKeys(false, "Userno", "Ts")
+	//	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "wevent").SetKeys(false, "Eventid")
+	//	srdblib.Dbmap.AddTableWithName(srdblib.Eventuser{}, "weventuser").SetKeys(false, "Eventid", "Userno")
+	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "event").SetKeys(false, "Eventid")
+
+	//      cookiejarがセットされたHTTPクライアントを作る
+	client, jar, err := exsrapi.CreateNewClient("ShowroomCGI")
+	if err != nil {
+		log.Printf("CreateNewClient: %s\n", err.Error())
+		return
+	}
+	//      すべての処理が終了したらcookiejarを保存する。
+	defer jar.Save()
+
+
 	RestoreScoremap()
 
 	var gschedulelist Gschedulelist
@@ -1732,7 +1773,7 @@ func main() {
 				log.Printf(" eventid=%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
 				switch gschedulelist[idx].Method {
 				case "GetScore":
-					ScanActive(gschedulelist[idx])
+					ScanActive(client, gschedulelist[idx])
 				case "CopyScore":
 					CopyScore(gschedulelist[idx])
 				case "GetConfirmed":
