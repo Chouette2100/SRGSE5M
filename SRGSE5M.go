@@ -119,13 +119,14 @@ import (
 	Ver. 021AA00 gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 	Ver. 021AB00 2時間ごとのuserテーブルの更新を停止する。
 	Ver. 021AC00 50位以内のルームの獲得ポイントの取得にはGetEventsRankingByApi()を使う。
+	Ver. 021AD00 block_id=0のブロックイベントに対応する。これはすべてのブロックイベントを含むイベント全体を示す。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AC00"
+const version = "021AD00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -642,11 +643,13 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		return
 	}
 
+	//	50位までのルームの順位、ポイントを取得する。
 	pranking, err := srdblib.GetEventsRankingByApi(client, gschedule.Eventid)
 	if err != nil {
 		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
 		return -1
 	}
+	//	usernoから結果を取得できるようにmapを作っておく
 	pmap := make(map[int]int)
 	for i, ranking := range(pranking.Ranking) {
 			pmap[ranking.Room.RoomID] = i
@@ -685,9 +688,22 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 				gap = -1
 				eventid = gschedule.Eventid
 			} else {
+				//	ランキングイベントで50位以内にないルームとレベルイベント-のルームの情報は個別に取得する。
 				point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
 			}
-			// if eventid != gschedule.Eventid {
+			eida := strings.Split(eventid, "?block_id=")
+			gida := strings.Split(gschedule.Eventid, "?block_id=")
+			if len(eida) == 2 && eida[0] == gida[0] {
+				//	この条件は暫定
+				//	下記の条件に加え、?block_id=0 がついていないイベントIDもブロックイベント全体を示すことを含んでいる。
+				//	（これは一時的な回避方法で発生した）
+				//	正しくは
+				//	if len(gida) == 2 && len(eida) == 2 && gida[1] == 0 && eida[0] == gida[0] {
+				//	bloc_id=0 はブロックイベントに含まれるすべてのイベントを意味している。
+				eventid = gschedule.Eventid
+				//	このパスでは順位の対象となっているイベントが違うことになるから順位は無意味である
+				rank = 0
+			}
 			if ! strings.Contains(eventid, gschedule.Eventid) {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。

@@ -29,9 +29,10 @@ import (
 01AA01	MakePointPerSlot()のperslotの変数宣言をループの中に入れる（毎回初期化されるように）
 01AB00	stmtを使いまわしたとき、2回目の前にstmt.Close()を行う。
 021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
+021AA01	VSCaodeで発生したエラーを修正する（処理には影響しない）
 */
 
-const Version = "021AA00"
+const Version = "021AA01"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -642,11 +643,11 @@ func UpdatePointsSetQstatus(
 func MakePointPerSlot(eventid string) (perslotinflist []PerSlotInf, status int) {
 
 	var perslotinf PerSlotInf
-	var event_inf Event_Inf
+	//	var event_inf Event_Inf
 
 	status = 0
 
-	event_inf.Event_ID = eventid
+	//	event_inf.Event_ID = eventid
 	//	eventno, eventname, period := SelectEventNoAndName(eventid)
 	eventname, period, _ := SelectEventNoAndName(eventid)
 
