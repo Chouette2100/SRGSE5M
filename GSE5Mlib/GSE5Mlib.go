@@ -1,4 +1,5 @@
-/*!
+/*
+!
 Copyright © 2022 chouette.21.00@gmail.com
 Released under the MIT license
 https://opensource.org/licenses/mit-license.php
@@ -34,7 +35,7 @@ import (
 	//	"SRGSE5M/SRDBlib"
 
 	"github.com/Chouette2100/exsrapi"
-	"github.com/Chouette2100/srapi"
+	//	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/srdblib"
 )
 
@@ -72,11 +73,12 @@ import (
 	0102F4	InsertIntoOrUpdateUser() stmtを使うところをそれぞれ別の変数にする。
 	021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 	021AB00	userのupdate、userhistoryのinsert/updateをやめる。userのinsertはsrdblib.InsertIntoUser()を使う。
+	021AC00	イベント終了時のポイント取得はsrdblib.GetEventsRankingByApi()を使う。RoomInfoにOrder(イベント順位)を追加する。
 
 
 */
 
-const Version = "021AB00"
+const Version = "021AC00"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -202,6 +204,7 @@ type RoomInfo struct {
 	//	APIで取得できるデータ(2)
 	Point        int //	イベント終了直後はイベントページから取得できることもある
 	Spoint       string
+	Order        int
 	Istarget     string
 	Graph        string
 	Iscntrbpoint string
@@ -265,7 +268,7 @@ type Color struct {
 	Value string
 }
 
-//	https://www.fukushihoken.metro.tokyo.lg.jp/kiban/machizukuri/kanren/color.files/colorudguideline.pdf
+// https://www.fukushihoken.metro.tokyo.lg.jp/kiban/machizukuri/kanren/color.files/colorudguideline.pdf
 var Colorlist2 []Color = []Color{
 	{"red", "#FF2800"},
 	{"yellow", "#FAF500"},
@@ -558,9 +561,9 @@ func GetEventListByAPI(eventinflist *[]Event_Inf) (status int) {
 	return
 }
 
-//	idで指定した配信者さんの獲得ポイントを取得する。
-//	戻り値は 獲得ポイント、順位、上位とのポイント差（1位の場合は2位とのポイント差）、イベント名
-//	レベルイベントのときは順位、上位とのポイント差は0がセットされる。
+// idで指定した配信者さんの獲得ポイントを取得する。
+// 戻り値は 獲得ポイント、順位、上位とのポイント差（1位の場合は2位とのポイント差）、イベント名
+// レベルイベントのときは順位、上位とのポイント差は0がセットされる。
 func GetPointsByAPI(id string) (Point, Rank, Gap int, EventID string) {
 
 	//	獲得ポイントなどの配信者情報を得るURL（このURLについては記事参照）
@@ -640,7 +643,6 @@ func GetPointsByAPI(id string) (Point, Rank, Gap int, EventID string) {
 }
 
 /*
-
  */
 func GetIsOnliveByAPI(room_id string) (
 	isonlive bool, //	true:	配信中
@@ -1036,7 +1038,7 @@ func InsertRoomInf(eventid string, roominfolist *RoomInfoList) {
 func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string, roominf RoomInfo) (status int) {
 
 	/*
-	var stmt1, stmt2, stmt3 *sql.Stmt
+		var stmt1, stmt2, stmt3 *sql.Stmt
 	*/
 
 	status = 0
@@ -1056,13 +1058,13 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 	}
 
 	/*
-	name := ""
-	genre := ""
-	rank := ""
-	nrank := ""
-	prank := ""
-	level := 0
-	followers := 0
+		name := ""
+		genre := ""
+		rank := ""
+		nrank := ""
+		prank := ""
+		level := 0
+		followers := 0
 	*/
 
 	if nrow == 0 {
@@ -1075,41 +1077,22 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 
 		/*
 
-		sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+			sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
-		//	log.Printf("sql=%s\n", sql)
-		stmt1, srdblib.Dberr = srdblib.Db.Prepare(sql)
-		if srdblib.Dberr != nil {
-			log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", srdblib.Dberr.Error())
-			status = -1
-			return
-		}
-		defer stmt1.Close()
+			//	log.Printf("sql=%s\n", sql)
+			stmt1, srdblib.Dberr = srdblib.Db.Prepare(sql)
+			if srdblib.Dberr != nil {
+				log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", srdblib.Dberr.Error())
+				status = -1
+				return
+			}
+			defer stmt1.Close()
 
-		lenid := len(roominf.ID)
-		_, srdblib.Dberr = stmt1.Exec(
-			userno,
-			roominf.Account,
-			roominf.Name,
-			roominf.ID,
-			roominf.ID[lenid-2:lenid],
-			roominf.Genre,
-			roominf.Rank,
-			roominf.Nrank,
-			roominf.Prank,
-			roominf.Level,
-			roominf.Followers,
-			tnow,
-			eventid,
-		)
-
-		if srdblib.Dberr != nil {
-			log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
-			//	status = -2
+			lenid := len(roominf.ID)
 			_, srdblib.Dberr = stmt1.Exec(
 				userno,
 				roominf.Account,
-				roominf.Account,
+				roominf.Name,
 				roominf.ID,
 				roominf.ID[lenid-2:lenid],
 				roominf.Genre,
@@ -1121,58 +1104,113 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 				tnow,
 				eventid,
 			)
+
 			if srdblib.Dberr != nil {
 				log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
-				status = -2
+				//	status = -2
+				_, srdblib.Dberr = stmt1.Exec(
+					userno,
+					roominf.Account,
+					roominf.Account,
+					roominf.ID,
+					roominf.ID[lenid-2:lenid],
+					roominf.Genre,
+					roominf.Rank,
+					roominf.Nrank,
+					roominf.Prank,
+					roominf.Level,
+					roominf.Followers,
+					tnow,
+					eventid,
+				)
+				if srdblib.Dberr != nil {
+					log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
+					status = -2
+				}
 			}
-		}
 		*/
 	}
 	/*
-	} else {
+		} else {
 
-		sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
-		srdblib.Dberr = srdblib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
-		if srdblib.Dberr != nil {
-			log.Printf("err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-		}
-		//	log.Printf("current userno=%d name=%s, nrank=%s, level=%d, followers=%d\n", userno, name, nrank, level, followers)
-
-		if roominf.Genre != genre ||
-			roominf.Rank != rank ||
-			roominf.Nrank != nrank ||
-			roominf.Prank != prank ||
-			roominf.Level != level ||
-			roominf.Followers != followers {
-
-			isnew = true
-
-			log.Printf("insert into user(*changed*) userno=%d level=%d, followers=%d\n", userno, roominf.Level, roominf.Followers)
-
-			sql := "update user set userid=?,"
-			sql += "user_name=?,"
-			sql += "genre=?,"
-			sql += "`rank`=?,"
-			sql += "nrank=?,"
-			sql += "prank=?,"
-			sql += "level=?,"
-			sql += "followers=?,"
-			sql += "ts=?,"
-			sql += "currentevent=? "
-			sql += "where userno=?"
-
-			stmt2, srdblib.Dberr = srdblib.Db.Prepare(sql)
-
+			sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
+			srdblib.Dberr = srdblib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
 			if srdblib.Dberr != nil {
-				log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", srdblib.Dberr.Error())
+				log.Printf("err=[%s]\n", srdblib.Dberr.Error())
 				status = -1
+			}
+			//	log.Printf("current userno=%d name=%s, nrank=%s, level=%d, followers=%d\n", userno, name, nrank, level, followers)
+
+			if roominf.Genre != genre ||
+				roominf.Rank != rank ||
+				roominf.Nrank != nrank ||
+				roominf.Prank != prank ||
+				roominf.Level != level ||
+				roominf.Followers != followers {
+
+				isnew = true
+
+				log.Printf("insert into user(*changed*) userno=%d level=%d, followers=%d\n", userno, roominf.Level, roominf.Followers)
+
+				sql := "update user set userid=?,"
+				sql += "user_name=?,"
+				sql += "genre=?,"
+				sql += "`rank`=?,"
+				sql += "nrank=?,"
+				sql += "prank=?,"
+				sql += "level=?,"
+				sql += "followers=?,"
+				sql += "ts=?,"
+				sql += "currentevent=? "
+				sql += "where userno=?"
+
+				stmt2, srdblib.Dberr = srdblib.Db.Prepare(sql)
+
+				if srdblib.Dberr != nil {
+					log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", srdblib.Dberr.Error())
+					status = -1
+					return
+				}
+				defer stmt2.Close()
+
+				_, srdblib.Dberr = stmt2.Exec(
+					roominf.Account,
+					roominf.Name,
+					roominf.Genre,
+					roominf.Rank,
+					roominf.Nrank,
+					roominf.Prank,
+					roominf.Level,
+					roominf.Followers,
+					tnow,
+					eventid,
+					roominf.ID,
+				)
+
+				if srdblib.Dberr != nil {
+					log.Printf("error(InsertIntoOrUpdateUser() Update/Exec) err=%s\n", srdblib.Dberr.Error())
+					status = -2
+				}
+			}
+
+		}
+	*/
+
+	/*
+		if isnew {
+			sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
+			//	log.Printf("sql=%s\n", sql)
+			stmt3, srdblib.Dberr = srdblib.Db.Prepare(sql)
+			if srdblib.Dberr != nil {
+				log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", srdblib.Dberr.Error())
+				status = -1
+				stmt3.Close()
 				return
 			}
-			defer stmt2.Close()
+			defer stmt3.Close()
 
-			_, srdblib.Dberr = stmt2.Exec(
-				roominf.Account,
+			_, srdblib.Dberr = stmt3.Exec(
+				userno,
 				roominf.Name,
 				roominf.Genre,
 				roominf.Rank,
@@ -1181,65 +1219,29 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 				roominf.Level,
 				roominf.Followers,
 				tnow,
-				eventid,
-				roominf.ID,
 			)
 
-			if srdblib.Dberr != nil {
-				log.Printf("error(InsertIntoOrUpdateUser() Update/Exec) err=%s\n", srdblib.Dberr.Error())
-				status = -2
-			}
-		}
-
-	}
-	*/
-
-	/*
-	if isnew {
-		sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
-		//	log.Printf("sql=%s\n", sql)
-		stmt3, srdblib.Dberr = srdblib.Db.Prepare(sql)
-		if srdblib.Dberr != nil {
-			log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", srdblib.Dberr.Error())
-			status = -1
-			stmt3.Close()
-			return
-		}
-		defer stmt3.Close()
-
-		_, srdblib.Dberr = stmt3.Exec(
-			userno,
-			roominf.Name,
-			roominf.Genre,
-			roominf.Rank,
-			roominf.Nrank,
-			roominf.Prank,
-			roominf.Level,
-			roominf.Followers,
-			tnow,
-		)
-
-		if srdblib.Dberr != nil {
-			log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
-			//	status = -2
-			_, srdblib.Dberr = stmt3.Exec(
-				userno,
-				roominf.Account,
-				roominf.Genre,
-				roominf.Rank,
-				roominf.Nrank,
-				roominf.Prank,
-				roominf.Level,
-				roominf.Followers,
-				tnow,
-			)
 			if srdblib.Dberr != nil {
 				log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
-				status = -2
+				//	status = -2
+				_, srdblib.Dberr = stmt3.Exec(
+					userno,
+					roominf.Account,
+					roominf.Genre,
+					roominf.Rank,
+					roominf.Nrank,
+					roominf.Prank,
+					roominf.Level,
+					roominf.Followers,
+					tnow,
+				)
+				if srdblib.Dberr != nil {
+					log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
+					status = -2
+				}
 			}
-		}
 
-	}
+		}
 	*/
 
 	return
@@ -1329,7 +1331,7 @@ func GetEventInfAndRoomList(
 	//	_url = "file:20210128-1143.html"
 
 	var doc *goquery.Document
-	var err error
+	//	var err error
 
 	inputmode := "url"
 	eventidorfilename := eventid
@@ -1337,50 +1339,24 @@ func GetEventInfAndRoomList(
 
 	status = 0
 
-	if inputmode == "file" {
-
-		//	ファイルからドキュメントを作成します
-		f, e := os.Open(eventidorfilename)
-		if e != nil {
-			//	log.Fatal(e)
-			log.Printf("err=[%s]\n", e.Error())
-			status = -1
-			return
-		}
-		defer f.Close()
-		doc, err = goquery.NewDocumentFromReader(f)
-		if err != nil {
-			//	log.Fatal(err)
-			log.Printf("err=[%s]\n", err.Error())
-			status = -1
-			return
-		}
-
-		content, _ := doc.Find("head > meta:nth-child(6)").Attr("content")
-		content_div := strings.Split(content, "/")
-		(*eventinfo).Event_ID = content_div[len(content_div)-1]
-
-	} else {
-
-		//	URLからドキュメントを作成します
-		_url := "https://www.showroom-live.com/event/" + eventidorfilename
-		resp, error := http.Get(_url)
-		if error != nil {
-			log.Printf("iGetEventInfAndRoomList() http.Get() err=%s\n", error.Error())
-			status = 1
-			return
-		}
-		defer resp.Body.Close()
-
-		doc, error = goquery.NewDocumentFromReader(resp.Body)
-		if error != nil {
-			log.Printf("GetEventInfAndRoomList() goquery.NewDocumentFromReader() err=<%s>.\n", error.Error())
-			status = 1
-			return
-		}
-
-		(*eventinfo).Event_ID = eventidorfilename
+	//	URLからドキュメントを作成します
+	_url := "https://www.showroom-live.com/event/" + eventidorfilename
+	resp, error := http.Get(_url)
+	if error != nil {
+		log.Printf("iGetEventInfAndRoomList() http.Get() err=%s\n", error.Error())
+		status = 1
+		return
 	}
+	defer resp.Body.Close()
+
+	doc, error = goquery.NewDocumentFromReader(resp.Body)
+	if error != nil {
+		log.Printf("GetEventInfAndRoomList() goquery.NewDocumentFromReader() err=<%s>.\n", error.Error())
+		status = 1
+		return
+	}
+
+	(*eventinfo).Event_ID = eventidorfilename
 	//	log.Printf(" eventid=%s\n", (*eventinfo).Event_ID)
 
 	selector := doc.Find(".detail")
@@ -1391,6 +1367,7 @@ func GetEventInfAndRoomList(
 		return
 	}
 	(*eventinfo).Period = selector.Find(".info").Text()
+	eventinfo.Period = strings.Replace(eventinfo.Period, "\u202f", " ", -1)
 	period := strings.Split((*eventinfo).Period, " - ")
 	if inputmode == "url" {
 		(*eventinfo).Start_time, _ = time.Parse("Jan 2, 2006 3:04 PM MST", period[0]+" JST")
@@ -1424,7 +1401,36 @@ func GetEventInfAndRoomList(
 	//	log.Printf(" eventno=%d\n", eventno)
 	//	(*eventinfo).Event_no = eventno
 
-	if !strings.Contains(eventid, "?") {
+	//      cookiejarがセットされたHTTPクライアントを作る
+	client, jar, err := exsrapi.CreateNewClient("ShowroomCGI")
+	if err != nil {
+		log.Printf("CreateNewClient: %s\n", err.Error())
+		return
+	}
+	//      すべての処理が終了したらcookiejarを保存する。
+	defer jar.Save()
+
+	pranking, err := srdblib.GetEventsRankingByApi(client, eventid)
+	if err != nil {
+		log.Printf("GetEventsRankingByApi: %s\n", err.Error())
+		return
+	}
+
+	//	ReplaceString := "/r/"
+	for _, rk := range pranking.Ranking {
+		*roominfolist = append(*roominfolist,
+			RoomInfo{
+				ID:      strconv.Itoa(rk.Room.RoomID),
+				Userno:  rk.Room.RoomID,
+				Account: "", //	<==
+				Name:    rk.Room.Name,
+				Point:   rk.Point,
+				Order:   rk.Rank,
+			})
+	}
+
+	//	if !strings.Contains(eventid, "?") {
+	if len(pranking.Ranking) == 0 {
 
 		//	抽出したルームすべてに対して処理を繰り返す(が、イベント開始後の場合の処理はルーム数がbreg、eregの範囲に限定）
 		//	イベント開始前のときはすべて取得し、ソートしたあてで範囲を限定する）
@@ -1457,7 +1463,7 @@ func GetEventInfAndRoomList(
 
 			quest := s.Find(".label-quest").Text()
 			if quest != "" {
-				isquest  = true
+				isquest = true
 				return false
 			}
 
@@ -1484,46 +1490,49 @@ func GetEventInfAndRoomList(
 
 		})
 
-	} else {
-
-		isquest = false
-		//	event_id := 30030
-		eia := strings.Split(eventid, "=")
-		blockid, _ := strconv.Atoi(eia[1])
-
-		//      cookiejarがセットされたHTTPクライアントを作る
-		client, jar, err := exsrapi.CreateNewClient("ShowroomCGI")
-		if err != nil {
-			log.Printf("CreateNewClient: %s\n", err.Error())
-			return
-		}
-		//      すべての処理が終了したらcookiejarを保存する。
-		defer jar.Save()
-
-		ebr, err := srapi.GetEventBlockRanking(client, ieventid, blockid, breg, ereg)
-		if err != nil {
-			log.Printf("GetEventBlockRanking() err=%s\n", err.Error())
-			status = 1
-			return
-		}
-
-		ReplaceString := "/r/"
-
-		for _, br := range ebr.Block_ranking_list {
-
-			var roominfo RoomInfo
-
-			roominfo.ID = br.Room_id
-			roominfo.Userno, _ = strconv.Atoi(roominfo.ID)
-			roominfo.Account = strings.Replace(br.Room_url_key, ReplaceString, "", -1)
-			roominfo.Name = br.Room_name
-
-			roominfo.Point = br.Point
-			*roominfolist = append(*roominfolist, roominfo)
-
-		}
-
 	}
+	/*
+		} else {
+
+			isquest = false
+			//	event_id := 30030
+			eia := strings.Split(eventid, "=")
+			blockid, _ := strconv.Atoi(eia[1])
+
+			//      cookiejarがセットされたHTTPクライアントを作る
+			client, jar, err := exsrapi.CreateNewClient("ShowroomCGI")
+			if err != nil {
+				log.Printf("CreateNewClient: %s\n", err.Error())
+				return
+			}
+			//      すべての処理が終了したらcookiejarを保存する。
+			defer jar.Save()
+
+			ebr, err := srapi.GetEventBlockRanking(client, ieventid, blockid, breg, ereg)
+			if err != nil {
+				log.Printf("GetEventBlockRanking() err=%s\n", err.Error())
+				status = 1
+				return
+			}
+
+			ReplaceString := "/r/"
+
+			for _, br := range ebr.Block_ranking_list {
+
+				var roominfo RoomInfo
+
+				roominfo.ID = br.Room_id
+				roominfo.Userno, _ = strconv.Atoi(roominfo.ID)
+				roominfo.Account = strings.Replace(br.Room_url_key, ReplaceString, "", -1)
+				roominfo.Name = br.Room_name
+
+				roominfo.Point = br.Point
+				*roominfolist = append(*roominfolist, roominfo)
+
+			}
+
+		}
+	*/
 
 	(*eventinfo).NoRoom = len(*roominfolist)
 
