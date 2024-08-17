@@ -27,10 +27,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
-	"os"
 
 	//	. "log"
 	//	"bufio"
@@ -54,8 +54,8 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/Chouette2100/srdblib"
 	"github.com/Chouette2100/exsrapi"
+	"github.com/Chouette2100/srdblib"
 )
 
 /*
@@ -120,13 +120,14 @@ import (
 	Ver. 021AB00 2時間ごとのuserテーブルの更新を停止する。
 	Ver. 021AC00 50位以内のルームの獲得ポイントの取得にはGetEventsRankingByApi()を使う。
 	Ver. 021AD00 block_id=0のブロックイベントに対応する。これはすべてのブロックイベントを含むイベント全体を示す。
+	Ver. 021AD01 block_id=0のとき、51位以下のルームには順位をつけないようにする。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AD00"
+const version = "021AD01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -651,8 +652,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	}
 	//	usernoから結果を取得できるようにmapを作っておく
 	pmap := make(map[int]int)
-	for i, ranking := range(pranking.Ranking) {
-			pmap[ranking.Room.RoomID] = i
+	for i, ranking := range pranking.Ranking {
+		pmap[ranking.Room.RoomID] = i
 	}
 
 	var tx *sql.Tx
@@ -701,10 +702,17 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 				//	if len(gida) == 2 && len(eida) == 2 && gida[1] == 0 && eida[0] == gida[0] {
 				//	bloc_id=0 はブロックイベントに含まれるすべてのイベントを意味している。
 				eventid = gschedule.Eventid
-				//	このパスでは順位の対象となっているイベントが違うことになるから順位は無意味である
-				rank = 0
+
+				//	len(gida) == 2 のとき
+				//		gida[1] != "0" ならば通常のブロックイベント
+				//		gida[1] == "0" ならばそのイベントに属するすべてのイベントをまとめたもの
+				//			ここで eida[1] != "0" であれば個別のイベントの結果を取得したことになるので rank = 0 とする
+				//	len(gida) ==1 && eida[1] != "0" の場合も同様
+				if eida[1] != "0" && (len(gida) == 1 || len(gida) == 2 && gida[1] == "0") {
+					rank = 0
+				}
 			}
-			if ! strings.Contains(eventid, gschedule.Eventid) {
+			if !strings.Contains(eventid, gschedule.Eventid) {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
 				log.Printf(" eventid=(%s) isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
@@ -768,7 +776,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 					eventid = gschedule.Eventid
 					rank = 0
 				}
-				
+
 			}
 			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(IdList[i])
 			if _, ok := scoremap[id]; ok {
@@ -1738,7 +1746,6 @@ func main() {
 	//      すべての処理が終了したらcookiejarを保存する。
 	defer jar.Save()
 
-
 	RestoreScoremap()
 
 	var gschedulelist Gschedulelist
@@ -1755,7 +1762,7 @@ func main() {
 
 	status := 0
 
-//	outerloop:
+	//	outerloop:
 	for {
 		gschedulelist, status = GetSchedule()
 		if status != 0 {
@@ -1802,12 +1809,12 @@ func main() {
 		}
 
 		/*
-		//	毎日偶数時 5分に特定ユーザーのユーザー情報を取得する
-		//	レベルやフォロワー数の推移を記録する
-		//	if hh%6 == 3 && mm == 1 {
-		if hh%2 == 0 && mm == 5 {
-			GSE5Mlib.GetUserInfForHistory()
-		}
+			//	毎日偶数時 5分に特定ユーザーのユーザー情報を取得する
+			//	レベルやフォロワー数の推移を記録する
+			//	if hh%6 == 3 && mm == 1 {
+			if hh%2 == 0 && mm == 5 {
+				GSE5Mlib.GetUserInfForHistory()
+			}
 		*/
 
 		//	毎分00秒になるまで待つ
@@ -1821,10 +1828,10 @@ func main() {
 			hh24 = 24
 		}
 		/*
-		if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
-			//	一定時間経ったら処理を終了する
-			break outerloop
-		}
+			if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
+				//	一定時間経ったら処理を終了する
+				break outerloop
+			}
 		*/
 	}
 	//	log.Printf(" end time=%s\n", t.Format("2006-01-02 15:04:05"))
