@@ -778,7 +778,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 				}
 
 			}
-			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(IdList[i])
+			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(client, IdList[i])
 			if _, ok := scoremap[id]; ok {
 				if isonlive {
 					scoremap[id].NoOffline = 0

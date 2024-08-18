@@ -30,12 +30,12 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/dustin/go-humanize"
+	//	"github.com/dustin/go-humanize"
 
 	//	"SRGSE5M/SRDBlib"
 
+	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/exsrapi"
-	//	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/srdblib"
 )
 
@@ -74,11 +74,13 @@ import (
 	021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 	021AB00	userのupdate、userhistoryのinsert/updateをやめる。userのinsertはsrdblib.InsertIntoUser()を使う。
 	021AC00	イベント終了時のポイント取得はsrdblib.GetEventsRankingByApi()を使う。RoomInfoにOrder(イベント順位)を追加する。
+	021AD00	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する。
+	021AD01	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する(2)
 
 
 */
 
-const Version = "021AC00"
+const Version = "021AD01"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -644,7 +646,7 @@ func GetPointsByAPI(id string) (Point, Rank, Gap int, EventID string) {
 
 /*
  */
-func GetIsOnliveByAPI(room_id string) (
+func GetIsOnliveByAPI(client *http.Client, room_id string) (
 	isonlive bool, //	true:	配信中
 	startedat time.Time, //	配信開始時刻（isonliveがtrueのときだけ意味があります）
 	status int,
@@ -652,6 +654,61 @@ func GetIsOnliveByAPI(room_id string) (
 
 	status = 0
 
+	user, err := srdblib.Dbmap.Get(&srdblib.User{}, func(a string) int {i, _ := strconv.Atoi(a); return i}(room_id))
+	if err != nil {
+		log.Printf("GetIsOnliveByAPI() err=%s\n", err.Error())
+		status = -1
+		return
+	}
+	roomstatus, err := srapi.ApiRoomStatus(client, user.(*srdblib.User).Userid)
+	if err != nil {
+		log.Printf("GetIsOnliveByAPI() err=%s\n", err.Error())
+		status = -1
+		return
+	}
+
+	isonlive = roomstatus.Is_live
+	startedat = time.Unix(roomstatus.Started_at, 0).Truncate(time.Second)
+
+	/*
+	//	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	url := "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" + room_id
+
+	resp, err := http.Get(url)
+	if err != nil {
+		//	一時的にデー�が取得できない。
+		//	resp.Body.Close()
+		//		panic(err)
+		status = -1
+		return
+	}
+	defer resp.Body.Close()
+
+	//	JSONをデコードする。
+	//	次の記事を参考にさせていただいております。
+	//		Go言��でJSONに��かないためのコー�ィングパターン
+	//		XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+	var result interface{}
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&result); err != nil {
+		//	panic(err)
+		status = -2
+		return
+	}
+
+	//	配信中か？
+	isonlive, _ = result.(map[string]interface{})["is_onlive"].(bool)
+
+	if isonlive {
+		//	配信開始時��の取得
+		value, _ := result.(map[string]interface{})["current_live_started_at"].(float64)
+		startedat = time.Unix(int64(value), 0).Truncate(time.Second)
+		//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
+	}
+	*/
+
+	/*
 	//	https://qiita.com/takeru7584/items/f4ba4c31551204279ed2
 	url := "https://www.showroom-live.com/api/room/profile?room_id=" + room_id
 
@@ -687,11 +744,13 @@ func GetIsOnliveByAPI(room_id string) (
 		startedat = time.Unix(int64(value), 0).Truncate(time.Second)
 		//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
 	}
+	*/
 
 	return
 
 }
 
+/*
 func GetRoomInfoByAPI(room_id string) (
 	genre string,
 	rank string,
@@ -762,6 +821,7 @@ func GetRoomInfoByAPI(room_id string) (
 	return
 
 }
+*/
 
 func GetNextliveByAPI(room_id string) (
 	nextlive string,
