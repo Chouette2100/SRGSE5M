@@ -76,11 +76,12 @@ import (
 	021AC00	イベント終了時のポイント取得はsrdblib.GetEventsRankingByApi()を使う。RoomInfoにOrder(イベント順位)を追加する。
 	021AD00	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する。
 	021AD01	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する(2)
+	021AE00	GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
 
 
 */
 
-const Version = "021AD01"
+const Version = "021AE00"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1470,7 +1471,7 @@ func GetEventInfAndRoomList(
 	//      すべての処理が終了したらcookiejarを保存する。
 	defer jar.Save()
 
-	pranking, err := srdblib.GetEventsRankingByApi(client, eventid)
+	pranking, err := srdblib.GetEventsRankingByApi(client, eventid, 2)
 	if err != nil {
 		log.Printf("GetEventsRankingByApi: %s\n", err.Error())
 		return

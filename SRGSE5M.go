@@ -121,13 +121,14 @@ import (
 	Ver. 021AC00 50位以内のルームの獲得ポイントの取得にはGetEventsRankingByApi()を使う。
 	Ver. 021AD00 block_id=0のブロックイベントに対応する。これはすべてのブロックイベントを含むイベント全体を示す。
 	Ver. 021AD01 block_id=0のとき、51位以下のルームには順位をつけないようにする。
+		 021AE00 GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AD01"
+const version = "021AE00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -645,7 +646,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	}
 
 	//	50位までのルームの順位、ポイントを取得する。
-	pranking, err := srdblib.GetEventsRankingByApi(client, gschedule.Eventid)
+	//	イベント開催中でない場合はエラーとなる
+	pranking, err := srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
 	if err != nil {
 		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
 		return -1
