@@ -122,13 +122,14 @@ import (
 	Ver. 021AD00 block_id=0のブロックイベントに対応する。これはすべてのブロックイベントを含むイベント全体を示す。
 	Ver. 021AD01 block_id=0のとき、51位以下のルームには順位をつけないようにする。
 		 021AE00 GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
+	Ver. 021AE01 CopyScore()でイベント終了時刻＋58秒以前のデータはイベント終了前のデータとみなす。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AE00"
+const version = "021AE01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1415,7 +1416,7 @@ func CopyScore(gschedule Gschedule) (status int) {
 
 	log.Printf("gtime=%s\n", gtime.Format("2006/01/02 15:04:06"))
 
-	if gtime.Before(gschedule.Endtime) {
+	if gtime.Before(gschedule.Endtime.Add(58 * time.Second)) {
 		//	終了処理が行われていない。
 
 		//	---------------------------------------------------
@@ -1481,6 +1482,9 @@ func CopyScore(gschedule Gschedule) (status int) {
 			*/
 
 		}
+	} else {
+		log.Printf("CopyScore() (9) err=Unexpected data found\n")
+		status = -9
 	}
 
 	//	終了処理が行われていてもこのパスを通るのはデータの整合性が失われた（失わせた）ケース。
