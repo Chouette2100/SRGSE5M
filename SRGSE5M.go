@@ -123,13 +123,14 @@ import (
 	Ver. 021AD01 block_id=0のとき、51位以下のルームには順位をつけないようにする。
 		 021AE00 GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
 	Ver. 021AE01 CopyScore()でイベント終了時刻＋58秒以前のデータはイベント終了前のデータとみなす。
+	Ver. 021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AE01"
+const version = "021AE02"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -781,7 +782,11 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 				}
 
 			}
-			isonlive, startedat, _ = GSE5Mlib.GetIsOnliveByAPI(client, IdList[i])
+			isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, IdList[i])
+			if status != 0 {
+				log.Printf("GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", status)
+				continue
+			}
 			if _, ok := scoremap[id]; ok {
 				if isonlive {
 					scoremap[id].NoOffline = 0

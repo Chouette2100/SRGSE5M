@@ -77,11 +77,12 @@ import (
 	021AD00	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する。
 	021AD01	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する(2)
 	021AE00	GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
+	021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 
 
 */
 
-const Version = "021AE00"
+const Version = "021AE02"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -656,15 +657,20 @@ func GetIsOnliveByAPI(client *http.Client, room_id string) (
 	status = 0
 
 	user, err := srdblib.Dbmap.Get(&srdblib.User{}, func(a string) int {i, _ := strconv.Atoi(a); return i}(room_id))
+	if user == nil {
+		log.Printf("GetIsOnliveByAPI() user == nil\n")
+		status = -1
+		return
+	}
 	if err != nil {
 		log.Printf("GetIsOnliveByAPI() err=%s\n", err.Error())
-		status = -1
+		status = -2
 		return
 	}
 	roomstatus, err := srapi.ApiRoomStatus(client, user.(*srdblib.User).Userid)
 	if err != nil {
 		log.Printf("GetIsOnliveByAPI() err=%s\n", err.Error())
-		status = -1
+		status = -3
 		return
 	}
 
