@@ -2,3 +2,9 @@ SRGSE5M
 go.mod
 go.sum
 020*.txt
+021*.txt
+
+*cookies
+SRGSE5M.2024*
+launch.json
+GSE5Mlib/DBConfig.yml
