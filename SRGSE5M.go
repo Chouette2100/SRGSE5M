@@ -127,10 +127,12 @@ import (
 	Ver. 021AE03	GetIsOnliveByAPI()でエラーが起きたときはisonlive=false, startedat = time.Now()とする(暫定対応)
 	Ver. 021AE04	GetIsOnliveByAPI()での配信状態、配信開始時刻のチェックは行わない。
 
+
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
+
 
 const version = "021AE04"
 
@@ -643,7 +645,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		}
 	}
 
-	Length := len(IdList)
+	Length := len(*proomlist)
 
 	if Length == 0 {
 		return
@@ -675,7 +677,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	for i := 0; i < Length; i++ {
 
 		//	var makePQ func()
-		id, _ := strconv.Atoi(IdList[i])
+		sid := (*proomlist)[i].id
+		id, _ := strconv.Atoi(sid)
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
 		point := 0
@@ -733,7 +736,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 					if dup == 0 {
 						//	配信中のイベント終了であるので貢献ランキングを取得する。
 						//	RU20G6 InsertIntoTimeTable(eventid, id, timestamp.Add(15 * time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
-						if cntrblist[i] == "Y" {
+						if (*proomlist)[i].iscntrb == "Y" {
 							//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
 							InsertIntoTimeTable(gschedule.Eventid, id, timestamp.Add(15*time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
 							scoremap[id].Dup = -1
@@ -890,7 +893,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 						(*scoremap[id]).Continued = 0
 
-						if cntrblist[i] == "Y" {
+						if (*proomlist)[i].iscntrb == "Y" {
 							//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
 							if (*scoremap[id]).Sum0 != 0 {
 								//	配信がされていないときに順位が変わったケースは除く
@@ -1288,13 +1291,18 @@ func MakeComment() (status int) {
 	return
 }
 
-/*
-	各配信者さんの獲得ポイントのリストを作る（ファイルに追記する）
-	ファイルは獲得ポイントを横並びにしたものと、各配信者さんの順位、獲得ポイント、
-*/
+type RoomData struct {
+	Id      string
+	Point   int
+	Rank    int
+	Gap     int
+	Iscntrb string
+	Eventid string
+}
 
 func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 
+	var roomdata RoomData
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
@@ -1315,8 +1323,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	}
 	defer rows.Close()
 
-	idlist := make([]string, 0)
-	cntrblist := make([]string, 0)
+	roomlist := make([]RoomData, 0)
 	userno := 0
 
 	iscntrb := "N"
@@ -1329,8 +1336,10 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 			return
 		}
 
-		idlist = append(idlist, fmt.Sprintf("%d", userno))
-		cntrblist = append(cntrblist, iscntrb)
+		roomdata.id = fmt.Sprintf("%d", userno)
+		roomdata.iscntrb = iscntrb
+
+		roomlist = append(roomlist, roomdata)
 
 	}
 
@@ -1340,8 +1349,73 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 		return
 	}
 
+	proomlist = &roomlist
+
+	return
+
+}
+
+/*
+	各配信者さんの獲得ポイントのリストを作る（ファイルに追記する）
+	ファイルは獲得ポイントを横並びにしたものと、各配信者さんの順位、獲得ポイント、
+*/
+
+func ScanActive(gschedule Gschedule) (status int) {
+
+	/*
+		var stmt *sql.Stmt
+		var rows *sql.Rows
+
+		sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
+		stmt, SRDBlib.Err = SRDBlib.Db.Prepare(sqlstmt)
+		if SRDBlib.Err != nil {
+			log.Printf("ScanActive() Prepare() err=%s\n", SRDBlib.Err.Error())
+			status = -5
+			return
+		}
+		defer stmt.Close()
+
+		rows, SRDBlib.Err = stmt.Query(gschedule.Eventid)
+		if SRDBlib.Err != nil {
+			log.Printf("ScanActive() Query() (6) err=%s\n", SRDBlib.Err.Error())
+			status = -6
+			return
+		}
+		defer rows.Close()
+
+		idlist := make([]string, 0)
+		cntrblist := make([]string, 0)
+		userno := 0
+
+		iscntrb := "N"
+		for rows.Next() {
+			Err := rows.Scan(&userno, &iscntrb)
+
+			if Err != nil {
+				log.Printf("ScanActive() Scan() err=%s\n", Err.Error())
+				status = -7
+				return
+			}
+
+			idlist = append(idlist, fmt.Sprintf("%d", userno))
+			cntrblist = append(cntrblist, iscntrb)
+
+		}
+
+		if SRDBlib.Err = rows.Err(); SRDBlib.Err != nil {
+			log.Printf("ScanActive() rows err=%s\n", SRDBlib.Err.Error())
+			status = -8
+			return
+		}
+	*/
+
+	proomlist, status := GetUserlistFromDB(gschedule)
+	if status != 0 {
+		return
+	}
+
 	//	log.Println("ScanActive() idlist=", idlist)
-	if len(idlist) != 0 {
+	if len(*proomlist) != 0 {
 		//	status = GetPointsAll(idlist, gschedule, cntrblist)
 		go GetPointsAll(client, idlist, gschedule, cntrblist)
 	}
