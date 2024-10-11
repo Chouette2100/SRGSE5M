@@ -1,5 +1,3 @@
-※　システム全体の構成要素と各要素の整合性のとれるバージョンについては[SRCGI - README](https://github.com/Chouette2100/SRCGI/blob/main/README.md)にあります
-
 # SRGSE5M
 
 SHOWROOMのサーバから獲得ポイントのデータを取得してデータベースに格納します。
