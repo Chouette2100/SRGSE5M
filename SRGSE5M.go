@@ -55,6 +55,7 @@ import (
 	"github.com/dustin/go-humanize"
 
 	"github.com/Chouette2100/exsrapi"
+	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/srdblib"
 )
 
@@ -126,13 +127,14 @@ import (
 	Ver. 021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 	Ver. 021AE03	GetIsOnliveByAPI()でエラーが起きたときはisonlive=false, startedat = time.Now()とする(暫定対応)
 	Ver. 021AE04	GetIsOnliveByAPI()での配信状態、配信開始時刻のチェックは行わない。
+	Ver. 021AF00	bloc_id=0のイベントに対する処理を追加する（デバッグ中）
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AE04"
+const version = "021AF00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -649,17 +651,104 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		return
 	}
 
+	eventid := gschedule.Eventid
+	eida := strings.Split(eventid, "?")
+	var pranking *srapi.Eventranking
+	pmap := make(map[int]int)
+	var qranking *srapi.EventBlockRanking
+	plist := make([]srdblib.Points, 100)
+	var err error
 	//	50位までのルームの順位、ポイントを取得する。
 	//	イベント開催中でない場合はエラーとなる
-	pranking, err := srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
+	//  TODO: イベント終了後も取得可能なのでは？
+	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
 	if err != nil {
 		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
 		return -1
 	}
-	//	usernoから結果を取得できるようにmapを作っておく
-	pmap := make(map[int]int)
+	//	usernoから結果を取得し、ルームIDとから順位へのmapを作成する
 	for i, ranking := range pranking.Ranking {
 		pmap[ranking.Room.RoomID] = i
+		plist = append(plist,
+			srdblib.Points{
+				Eventid: eventid,
+				User_id: ranking.Room.RoomID,
+				Point:   ranking.Point,
+				Rank:    ranking.Rank,
+				Gap:     -1,
+			})
+	}
+
+	if len(eida) == 2 && eida[1] == "0" {
+		//    blockid=0のブロックイベントの場合
+		//	結果を作業用の構造体に格納する
+		/*
+			for _, ranking := range pranking.Ranking {
+				userno := ranking.Room.RoomID
+				plist = append(plist,
+					srdblib.Points{
+						User_id: userno,
+					})
+			}
+		*/
+		if len(pranking.Ranking) == 50 {
+			//    blockid=0のブロックイベントの場合100位までのルームの順位を取得する
+			blockid, _ := strconv.Atoi(strings.Split(eida[1], "=")[1])
+			qranking, err = srapi.GetEventBlockRanking(client, gschedule.Ieventid, blockid, 1, 100)
+			if err != nil {
+				log.Printf("GetPointsAll() GetEventBlockRanking() err=[%s]\n", err.Error())
+				return -1
+			}
+			//	51位以下の順位を作業用の構造体に格納する
+			ts := time.Now().Truncate(5 * time.Minute)
+			te := ts.Add(5 * time.Minute)
+			for i := 50; i < len(qranking.Block_ranking_list); i++ {
+				r := qranking.Block_ranking_list[i]
+				userno, _ := strconv.Atoi(r.Room_id)
+				sqlst := "select point from points "
+				sqlst += " where eventid like ? and evenid <> ? and user_id = ? and ts between ? and ? "
+				var p srdblib.Points
+				err = srdblib.Dbmap.SelectOne(&p, sqlst, gschedule.Eventid, eida[0]+"?block_id=", userno, ts, te)
+				if err != nil {
+					log.Printf("GetPointsAll() select err=[%s]\n", err.Error())
+					continue
+				}
+				if p.Point != 0 {
+					pmap[userno] = i
+					plist = append(plist,
+						srdblib.Points{
+							Eventid: eventid,
+							User_id: userno,
+							Point:   p.Point,
+							Rank:    r.Rank,
+						})
+				} else {
+					continue
+				}
+			}
+		}
+	} else {
+		var point, rank, gap int
+		for i := 0; i < Length; i++ {
+			userno, _ := strconv.Atoi(IdList[i])
+			if _, ok := pmap[userno]; ok {
+				continue
+			} else {
+				//	ランキングイベントで50位以内にないルームとレベルイベント-のルームの情報は個別に取得する。
+				point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
+				plist = append(plist,
+					srdblib.Points{
+						Eventid: eventid,
+						User_id: userno,
+						Point:   point,
+						Rank:    rank,
+						Gap:     gap,
+					})
+			}
+
+			//	var makePQ func()
+		}
+
 	}
 
 	var tx *sql.Tx
@@ -672,15 +761,16 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	//	pstatus := "n/a"
 	//	ptime := ""
-	for i := 0; i < Length; i++ {
+	point := 0
+	rank := 0
+	gap := 0
+
+	for i, p := range plist {
 
 		//	var makePQ func()
 		id, _ := strconv.Atoi(IdList[i])
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
-		point := 0
-		rank := 1
-		gap := 0
 		eventid := gschedule.Eventid
 
 		var isonlive bool
@@ -688,16 +778,11 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 		if !gschedule.Beforestart {
 			//	開催されているイベント
-			uno, _ := strconv.Atoi(IdList[i])
-			if idx, ok := pmap[uno]; ok {
-				point = pranking.Ranking[idx].Point
-				rank = pranking.Ranking[idx].Rank
-				gap = -1
-				eventid = gschedule.Eventid
-			} else {
-				//	ランキングイベントで50位以内にないルームとレベルイベント-のルームの情報は個別に取得する。
-				point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
-			}
+			//	uno, _ := strconv.Atoi(IdList[i])
+			eventid = gschedule.Eventid
+			point = p.Point
+			rank = p.Rank
+			gap = -1
 			eida := strings.Split(eventid, "?block_id=")
 			gida := strings.Split(gschedule.Eventid, "?block_id=")
 			if len(eida) == 2 && eida[0] == gida[0] {
@@ -788,8 +873,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			//	if status != 0 {
 			//		log.Printf("GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", status)
 			//		//	continue
-				isonlive = false
-				startedat = time.Now()
+			isonlive = false
+			startedat = time.Now()
 			//	}
 			if _, ok := scoremap[id]; ok {
 				if isonlive {
