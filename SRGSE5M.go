@@ -58,6 +58,7 @@ import (
 
 	"github.com/Chouette2100/exsrapi"
 	"github.com/Chouette2100/srapi"
+	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/srdblib"
 )
 
@@ -657,9 +658,17 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		return
 	}
 
+	eventid := gschedule.Eventid
+	eida := strings.Split(eventid, "?")
+	var pranking *srapi.Eventranking
+	pmap := make(map[int]int)
+	var qranking *srapi.EventBlockRanking
+	plist := make([]srdblib.Points, 100)
+	var err error
 	//	50位までのルームの順位、ポイントを取得する。
 	//	イベント開催中でない場合はエラーとなる
-	pranking, err := srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
+	//  TODO: イベント終了後も取得可能なのでは？
+	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
 	if err != nil {
 		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
 		return -1
@@ -735,9 +744,6 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		//	id := p.User_id
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
-		point := 0
-		rank := 1
-		gap := 0
 		eventid := gschedule.Eventid
 
 		var isonlive bool
