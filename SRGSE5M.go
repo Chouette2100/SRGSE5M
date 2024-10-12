@@ -25,6 +25,7 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 package main
 
 import (
+	//	"crypto/aes"
 	"fmt"
 	"log"
 	"os"
@@ -41,6 +42,7 @@ import (
 	"net/http"
 
 	"database/sql"
+
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/go-gorp/gorp"
@@ -55,6 +57,7 @@ import (
 	"github.com/dustin/go-humanize"
 
 	"github.com/Chouette2100/exsrapi"
+	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/srdblib"
 )
 
@@ -126,13 +129,14 @@ import (
 	Ver. 021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 	Ver. 021AE03	GetIsOnliveByAPI()でエラーが起きたときはisonlive=false, startedat = time.Now()とする(暫定対応)
 	Ver. 021AE04	GetIsOnliveByAPI()での配信状態、配信開始時刻のチェックは行わない。
+	Ver. 021AG00	Ver. 021AF00 bloc_id=0のイベントに対する処理を追加する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AE04"
+const version = "021AG00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -628,6 +632,10 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	status = 0
 
+	//	if gschedule.Eventid != "greatdetective?block_id=0" {
+	//		return
+	//	}
+
 	//	wtdp := 2
 	//	delay := time.Duration((wtdp+1)*gschedule.Intervalmin) * time.Minute
 
@@ -656,10 +664,55 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
 		return -1
 	}
+
+	eida := strings.Split(gschedule.Eventid, "block_id=")
+	qmap := make(map[int]int)
+	blockid := -1
+	qlist := new([]srapi.Block_ranking)
+	if len(eida) == 2 {
+		blockid, _ = strconv.Atoi(eida[1])
+		qranking, err := srapi.GetEventBlockRanking(client, gschedule.Ieventid, blockid, 1, 100)
+		if err != nil {
+			log.Printf("GetPointsAll() GetEventBlockRanking() err=[%s]\n", err.Error())
+		} else {
+			qlist = &qranking.Block_ranking_list
+			for i, ranking := range(qranking.Block_ranking_list) {
+				quno, _ := strconv.Atoi(ranking.Room_id)
+				qmap[quno] = i
+			}
+		}
+	}
+
 	//	usernoから結果を取得できるようにmapを作っておく
+	plist := make([]srdblib.Points, 0, 50)
 	pmap := make(map[int]int)
 	for i, ranking := range pranking.Ranking {
 		pmap[ranking.Room.RoomID] = i
+		plist = append(plist, srdblib.Points{
+			Eventid: gschedule.Eventid,
+			User_id: ranking.Room.RoomID,
+			Point:   ranking.Point,
+			Rank:    ranking.Rank,
+		})
+	}
+
+	for _, userid := range IdList {
+		userno, _ := strconv.Atoi(userid)
+		if _, ok := pmap[userno]; ok {
+			continue
+		} else {
+			point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
+			pmap[userno] = len(plist)
+			plist = append(plist, srdblib.Points{
+				Eventid: eventid,
+				User_id: userno,
+				Point:   point,
+				Rank:    rank,
+				Gap:     gap,
+			})
+
+		}
+
 	}
 
 	var tx *sql.Tx
@@ -672,10 +725,14 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	//	pstatus := "n/a"
 	//	ptime := ""
+	log.Printf("%+v\n", IdList)
 	for i := 0; i < Length; i++ {
+		//	for i, p := range(plist) {
 
 		//	var makePQ func()
 		id, _ := strconv.Atoi(IdList[i])
+		log.Printf("id=%d\n", id)
+		//	id := p.User_id
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
 		point := 0
@@ -690,35 +747,48 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			//	開催されているイベント
 			uno, _ := strconv.Atoi(IdList[i])
 			if idx, ok := pmap[uno]; ok {
-				point = pranking.Ranking[idx].Point
-				rank = pranking.Ranking[idx].Rank
-				gap = -1
+				p := plist[idx]
+				point = p.Point
+				rank = p.Rank
+				gap = p.Gap
 				eventid = gschedule.Eventid
-			} else {
-				//	ランキングイベントで50位以内にないルームとレベルイベント-のルームの情報は個別に取得する。
-				point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
-			}
-			eida := strings.Split(eventid, "?block_id=")
-			gida := strings.Split(gschedule.Eventid, "?block_id=")
-			if len(eida) == 2 && eida[0] == gida[0] {
-				//	この条件は暫定
-				//	下記の条件に加え、?block_id=0 がついていないイベントIDもブロックイベント全体を示すことを含んでいる。
-				//	（これは一時的な回避方法で発生した）
-				//	正しくは
-				//	if len(gida) == 2 && len(eida) == 2 && gida[1] == 0 && eida[0] == gida[0] {
-				//	bloc_id=0 はブロックイベントに含まれるすべてのイベントを意味している。
-				eventid = gschedule.Eventid
-
-				//	len(gida) == 2 のとき
-				//		gida[1] != "0" ならば通常のブロックイベント
-				//		gida[1] == "0" ならばそのイベントに属するすべてのイベントをまとめたもの
-				//			ここで eida[1] != "0" であれば個別のイベントの結果を取得したことになるので rank = 0 とする
-				//	len(gida) ==1 && eida[1] != "0" の場合も同様
-				if eida[1] != "0" && (len(gida) == 1 || len(gida) == 2 && gida[1] == "0") {
-					rank = 0
+				if blockid == 0 {
+					if idxq, ok := qmap[uno]; ok {
+						log.Printf(" rank=%d, qrank=%d\n", rank, (*qlist)[idxq].Rank)
+						rank = (*qlist)[idxq].Rank
+					} else {
+						rank = 0
+					}
 				}
+			} else {
+				continue
+				//		//	ランキングイベントで50位以内にないルームとレベルイベント-のルームの情報は個別に取得する。
+				//		point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(IdList[i])
 			}
-			if !strings.Contains(eventid, gschedule.Eventid) {
+			/*
+				eida := strings.Split(eventid, "?block_id=")
+				gida := strings.Split(gschedule.Eventid, "?block_id=")
+				if len(eida) == 2 && eida[0] == gida[0] {
+					//	この条件は暫定
+					//	下記の条件に加え、?block_id=0 がついていないイベントIDもブロックイベント全体を示すことを含んでいる。
+					//	（これは一時的な回避方法で発生した）
+					//	正しくは
+					//	if len(gida) == 2 && len(eida) == 2 && gida[1] == 0 && eida[0] == gida[0] {
+					//	bloc_id=0 はブロックイベントに含まれるすべてのイベントを意味している。
+					eventid = gschedule.Eventid
+
+					//	len(gida) == 2 のとき
+					//		gida[1] != "0" ならば通常のブロックイベント
+					//		gida[1] == "0" ならばそのイベントに属するすべてのイベントをまとめたもの
+					//			ここで eida[1] != "0" であれば個別のイベントの結果を取得したことになるので rank = 0 とする
+					//	len(gida) ==1 && eida[1] != "0" の場合も同様
+					if eida[1] != "0" && (len(gida) == 1 || len(gida) == 2 && gida[1] == "0") {
+						rank = 0
+					}
+				}
+			*/
+			//	if !strings.Contains(eventid, gschedule.Eventid) {
+			if !strings.Contains(gschedule.Eventid, eventid) {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
 				log.Printf(" eventid=(%s) isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
@@ -780,7 +850,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			} else {
 				if eventid != gschedule.Eventid {
 					eventid = gschedule.Eventid
-					rank = 0
+					//	rank = 0
 				}
 
 			}
@@ -788,8 +858,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			//	if status != 0 {
 			//		log.Printf("GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", status)
 			//		//	continue
-				isonlive = false
-				startedat = time.Now()
+			isonlive = false
+			startedat = time.Now()
 			//	}
 			if _, ok := scoremap[id]; ok {
 				if isonlive {
@@ -1045,6 +1115,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			//	log.Printf("scoremap[%d]=%v\n", id, scoremap[id])
 		}
 
+		log.Printf("id=%d point=%d rank=%d\n", id, point, rank)
 		InsertIntoPoints(tx, timestamp, id, point, rank, gap, eventid, pstatus, ptime, (*scoremap[id]).Qstatus, (*scoremap[id]).Qtime)
 
 	}
