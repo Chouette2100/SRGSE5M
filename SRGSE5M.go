@@ -58,7 +58,6 @@ import (
 
 	"github.com/Chouette2100/exsrapi"
 	"github.com/Chouette2100/srapi"
-	"github.com/Chouette2100/srapi"
 	"github.com/Chouette2100/srdblib"
 )
 
@@ -130,14 +129,14 @@ import (
 	Ver. 021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 	Ver. 021AE03	GetIsOnliveByAPI()でエラーが起きたときはisonlive=false, startedat = time.Now()とする(暫定対応)
 	Ver. 021AE04	GetIsOnliveByAPI()での配信状態、配信開始時刻のチェックは行わない。
-	Ver. 021AG00	Ver. 021AF00 bloc_id=0のイベントに対する処理を追加する
+	Ver. 021AG01	Ver. 021AF00 bloc_id=0のイベントに対する処理を追加する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AG00"
+const version = "021AG01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -658,12 +657,12 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		return
 	}
 
-	eventid := gschedule.Eventid
-	eida := strings.Split(eventid, "?")
+	//	eventid := gschedule.Eventid
+	//	eida := strings.Split(eventid, "?")
 	var pranking *srapi.Eventranking
-	pmap := make(map[int]int)
-	var qranking *srapi.EventBlockRanking
-	plist := make([]srdblib.Points, 100)
+	//	pmap := make(map[int]int)
+	//	var qranking *srapi.EventBlockRanking
+	//	plist := make([]srdblib.Points, 100)
 	var err error
 	//	50位までのルームの順位、ポイントを取得する。
 	//	イベント開催中でない場合はエラーとなる
@@ -749,6 +748,9 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		var isonlive bool
 		var startedat time.Time
 
+		point := 0
+		rank := 0
+		gap := 0
 		if !gschedule.Beforestart {
 			//	開催されているイベント
 			uno, _ := strconv.Atoi(IdList[i])
