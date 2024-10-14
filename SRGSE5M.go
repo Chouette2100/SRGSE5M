@@ -130,13 +130,14 @@ import (
 	Ver. 021AE03	GetIsOnliveByAPI()でエラーが起きたときはisonlive=false, startedat = time.Now()とする(暫定対応)
 	Ver. 021AE04	GetIsOnliveByAPI()での配信状態、配信開始時刻のチェックは行わない。
 	Ver. 021AG01	Ver. 021AF00 bloc_id=0のイベントに対する処理を追加する
+	Ver. 021AG02	ScanActive()とGetPointsAll()にPrintExf()を導入する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AG01"
+const version = "021AG02"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -629,6 +630,10 @@ func InsertIntoTimeTable(
 配信者のリストからそれぞれの獲得ポイントなどを取得する。
 */
 func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cntrblist []string) (status int) {
+
+	log.Println(gschedule.Eventid, "****************** GetPointsAll() *******************")
+	defer exsrapi.PrintExf(gschedule.Eventid, "GetPointsAll()")()
+
 
 	status = 0
 
@@ -1376,6 +1381,10 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 
 	var stmt *sql.Stmt
 	var rows *sql.Rows
+
+	log.Println(gschedule.Eventid, "****************** ScanActive() *******************")
+	defer exsrapi.PrintExf(gschedule.Eventid, "ScanActive()")()
+
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
 	stmt, srdblib.Dberr = srdblib.Db.Prepare(sqlstmt)
