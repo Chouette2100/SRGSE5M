@@ -131,13 +131,14 @@ import (
 	Ver. 021AE04	GetIsOnliveByAPI()での配信状態、配信開始時刻のチェックは行わない。
 	Ver. 021AG01	Ver. 021AF00 bloc_id=0のイベントに対する処理を追加する
 	Ver. 021AG02	ScanActive()とGetPointsAll()にPrintExf()を導入する
+	Ver. 021AG03	ScanActive()とGetPointsAll()にPrintExf()を導入する(出力形式を変更する)
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AG02"
+const version = "021AG03"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -744,7 +745,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 		//	var makePQ func()
 		id, _ := strconv.Atoi(IdList[i])
-		log.Printf("id=%d\n", id)
+		//	log.Printf("id=%d\n", id)
 		//	id := p.User_id
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
@@ -1128,7 +1129,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			//	log.Printf("scoremap[%d]=%v\n", id, scoremap[id])
 		}
 
-		log.Printf("id=%d point=%d rank=%d\n", id, point, rank)
+		log.Printf("%s id=%d point=%d rank=%d\n", eventid, id, point, rank)
 		InsertIntoPoints(tx, timestamp, id, point, rank, gap, eventid, pstatus, ptime, (*scoremap[id]).Qstatus, (*scoremap[id]).Qtime)
 
 	}
@@ -1383,7 +1384,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	var rows *sql.Rows
 
 	log.Println(gschedule.Eventid, "****************** ScanActive() *******************")
-	defer exsrapi.PrintExf(gschedule.Eventid, "ScanActive()")()
+	defer exsrapi.PrintExf("ScanActive()")()
 
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
