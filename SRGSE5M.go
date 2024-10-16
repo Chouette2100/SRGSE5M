@@ -132,13 +132,14 @@ import (
 	Ver. 021AG01	Ver. 021AF00 bloc_id=0のイベントに対する処理を追加する
 	Ver. 021AG02	ScanActive()とGetPointsAll()にPrintExf()を導入する
 	Ver. 021AG03	ScanActive()とGetPointsAll()にPrintExf()を導入する(出力形式を変更する)
+	Ver. 021AG04	GetPointsAll() イベントを途中で変えた50位より下位のルームを除外する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AG03"
+const version = "021AG04"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -679,7 +680,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		return -1
 	}
 
-	eida := strings.Split(gschedule.Eventid, "block_id=")
+	eida := strings.Split(gschedule.Eventid, "?block_id=")
 	qmap := make(map[int]int)
 	blockid := -1
 	qlist := new([]srapi.Block_ranking)
@@ -715,7 +716,13 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		if _, ok := pmap[userno]; ok {
 			continue
 		} else {
+			//	eventuserには存在する上位50位のデータには存在しないルーム
 			point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
+			if eventid != eida[0] {
+				//	イベントを変更した等、このイベントにはエントリーしていないルーム
+				//	GetPointsByAPI()で取得するeventidにはblock_idは入っていない
+				continue
+			}
 			pmap[userno] = len(plist)
 			plist = append(plist, srdblib.Points{
 				Eventid: eventid,
@@ -771,7 +778,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 						log.Printf(" rank=%d, qrank=%d\n", rank, (*qlist)[idxq].Rank)
 						rank = (*qlist)[idxq].Rank
 					} else {
-						rank = 0
+						rank = 9999
 					}
 				}
 			} else {
