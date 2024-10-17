@@ -133,13 +133,14 @@ import (
 	Ver. 021AG02	ScanActive()とGetPointsAll()にPrintExf()を導入する
 	Ver. 021AG03	ScanActive()とGetPointsAll()にPrintExf()を導入する(出力形式を変更する)
 	Ver. 021AG04	GetPointsAll() イベントを途中で変えた50位より下位のルームを除外する
+	Ver. 021AH00	GetPointsAll()をsrapi.GetPointAllByApi()に変更する。ログ出力の形式をイベントIDを中心に統一する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AG04"
+const version = "021AH00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -382,7 +383,7 @@ func InsertIntoOrUpdatePoints(
 		status = -1
 	}
 
-	log.Printf("eventid=%s userno=%d nrow=%d\n", eventid, roominf.Userno, nrow)
+	log.Printf("%s userno=%d nrow=%d\n", eventid, roominf.Userno, nrow)
 
 	if nrow == 0 {
 		log.Printf(" roominf=%v\n", roominf)
@@ -633,8 +634,11 @@ func InsertIntoTimeTable(
 */
 func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cntrblist []string) (status int) {
 
-	log.Println(gschedule.Eventid, "****************** GetPointsAll() *******************")
-	defer exsrapi.PrintExf(gschedule.Eventid, "GetPointsAll()")()
+	//	cmt0 := gschedule.Eventid
+	//	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	//	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	//	defer exsrapi.PrintExf(cmt0, fncname)() 
+
 
 
 	status = 0
@@ -717,8 +721,12 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			continue
 		} else {
 			//	eventuserには存在する上位50位のデータには存在しないルーム
-			point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
-			if eventid != eida[0] {
+			//	point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
+			point, rank, gap, _, eventid,  _, bid, err := srapi.GetPointByApi(client, userno)
+			if err != nil {
+				continue
+			}
+			if eventid != eida[0] || ( len(eida) == 2 && blockid != 0 && bid != blockid) {
 				//	イベントを変更した等、このイベントにはエントリーしていないルーム
 				//	GetPointsByAPI()で取得するeventidにはblock_idは入っていない
 				continue
@@ -746,7 +754,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	//	pstatus := "n/a"
 	//	ptime := ""
-	log.Printf("%+v\n", IdList)
+	//	log.Printf("%+v\n", IdList)
 	for i := 0; i < Length; i++ {
 		//	for i, p := range(plist) {
 
@@ -774,8 +782,10 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 				gap = p.Gap
 				eventid = gschedule.Eventid
 				if blockid == 0 {
+					//	ブロックIDが0の場合はGetPointByApi()で取得した順位がエントリーしたブロックでの順位であることに注意
+					//	OPTIMIZE: 以下の処理はブロックIDがが0で順位が50位より下のケース、工夫が足りない？
 					if idxq, ok := qmap[uno]; ok {
-						log.Printf(" rank=%d, qrank=%d\n", rank, (*qlist)[idxq].Rank)
+						//	log.Printf(" rank=%d, qrank=%d\n", rank, (*qlist)[idxq].Rank)
 						rank = (*qlist)[idxq].Rank
 					} else {
 						rank = 9999
@@ -812,12 +822,12 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			if !strings.Contains(gschedule.Eventid, eventid) {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
-				log.Printf(" eventid=(%s) isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
+				log.Printf("%s isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
 				dup := -9
 				if _, ok := scoremap[id]; ok {
 					dup = scoremap[id].Dup
 				}
-				log.Printf(" eventid=%s timestamp=%v gschedule.Endtime=%v scoremap[id].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
+				log.Printf("%s timestamp=%v gschedule.Endtime=%v scoremap[id].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
 				if timestamp.After(gschedule.Endtime) {
 					//	イベントが終了している。
 					//	if scoremap[id].Dup == 0 {	// 該当scoremap[id]が存在しない場合異常終了する。
@@ -830,9 +840,9 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 							scoremap[id].Dup = -1
 						}
 						//	makePQ()
-						log.Printf(" eventid=%s id=%d !isonlive\n", eventid, id)
+						log.Printf("%s id=%d !isonlive\n", eventid, id)
 						if _, ok := scoremap[id]; !ok {
-							log.Printf(" eventid=%s scoremap[%d] not found.\n", eventid, id)
+							log.Printf("%s scoremap[%d] not found.\n", eventid, id)
 							return
 						}
 
@@ -840,14 +850,14 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 						//	(*scoremap[id]).Qtime = (*scoremap[id]).Tstart0.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second).Format("01/02 15:04") + "--" + timestamp.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second-delay).Format("15:04")
 						ststart0 := (*scoremap[id]).Tstart0.Format("01/02 15:04")
 						stend := (*scoremap[id]).Tend.Format("15:04")
-						log.Printf(" eventid=%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
+						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
 						if ststart0 == "01/01 00:00" {
 							ststart0 = ""
 						}
 						if stend == "00:00" {
 							stend = ""
 						}
-						log.Printf(" eventid=%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
+						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
 						if ststart0 != "" || stend != "" {
 							(*scoremap[id]).Qtime = ststart0 + "--" + stend
 						} else {
@@ -889,7 +899,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 					scoremap[id].NoOffline++
 				}
 			} else {
-				log.Printf(" eventid=%s scoremap[%d] not found.\n", eventid, id)
+				log.Printf("%s scoremap[%d] not found.\n", eventid, id)
 			}
 		}
 
@@ -899,7 +909,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		if _, ok := scoremap[id]; ok {
 			if (*scoremap[id]).Eventid != gschedule.Eventid {
 				//	scoremap[]にあるイベントが取得対象のイベントと違う ＝  取得対象イベントでの初めてのデータ取得
-				log.Printf(" eventid=%s %s *Chg*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
+				log.Printf("%s %s *Chg*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
 				var score LastScore
 				score.Eventid = gschedule.Eventid
 				score.Score = point
@@ -942,9 +952,9 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 						//	makePQ = func() {
 
-						log.Printf(" eventid=%s id=%d !isonlive\n", eventid, id)
+						log.Printf("%s id=%d !isonlive\n", eventid, id)
 						if _, ok := scoremap[id]; !ok {
-							log.Printf(" eventid=%s scoremap[%d] not found.\n", eventid, id)
+							log.Printf("%s scoremap[%d] not found.\n", eventid, id)
 							//	return
 							continue
 						}
@@ -953,14 +963,14 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 						//	(*scoremap[id]).Qtime = (*scoremap[id]).Tstart0.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second).Format("01/02 15:04") + "--" + timestamp.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second-delay).Format("15:04")
 						ststart0 := (*scoremap[id]).Tstart0.Format("01/02 15:04")
 						stend := (*scoremap[id]).Tend.Format("15:04")
-						log.Printf(" eventid=%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
+						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
 						if ststart0 == "01/01 00:00" {
 							ststart0 = ""
 						}
 						if stend == "00:00" {
 							stend = ""
 						}
-						log.Printf(" eventid=%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
+						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
 						if ststart0 != "" || stend != "" {
 							(*scoremap[id]).Qtime = ststart0 + "--" + stend
 						} else {
@@ -1003,7 +1013,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 						ptime = ""
 						pstatus = "="
-						log.Printf(" eventid=%s p = [%s], [%s] q= [%s], [%s]\n", eventid, pstatus, ptime, (*scoremap[id]).Qstatus, (*scoremap[id]).Qtime)
+						log.Printf("%s p = [%s], [%s] q= [%s], [%s]\n", eventid, pstatus, ptime, (*scoremap[id]).Qstatus, (*scoremap[id]).Qtime)
 
 						//	(*scoremap[id]).Dup += 1
 						(*scoremap[id]).Sum0 = 0
@@ -1098,7 +1108,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 				}
 
 				//	log.Printf("different data idx=%d, eventid=%s, user_id=%d point=%d\n", idx, eventid, id, point)
-				log.Printf(" eventid=%s %s Diff.%8d%7d %s %s %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid, ptime, pstatus)
+				log.Printf("%s %s Diff.%8d%7d %s %s\n", eventid, timestamp.Format("15:04:05"), point, id, ptime, pstatus)
 				(*scoremap[id]).Score = point
 				(*scoremap[id]).Rank = rank
 				(*scoremap[id]).ts = timestamp
@@ -1108,7 +1118,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		} else {
 			//	ユーザの獲得ポイント履歴がない。新しく作ります。
 			//	log.Printf("new data idx=%d, user_id=%d point=%d\n", idx, id, point)
-			log.Printf(" eventid=%s %s *New*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
+			log.Printf("%s %s *New*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
 			var score LastScore
 			score.Eventid = gschedule.Eventid
 			score.Score = point
@@ -1285,7 +1295,7 @@ func MakeComment() (status int) {
 	tid := 0
 	fmt.Fscanf(filet, "%d %d", &trank, &tid)
 	filet.Close()
-	log.Printf("trank=%d, tid=%d\n", trank, tid)
+	//	log.Printf("trank=%d, tid=%d\n", trank, tid)
 
 	if tid == 0 {
 		//	着目すべき配信者が指定されていない
@@ -1390,8 +1400,11 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
-	log.Println(gschedule.Eventid, "****************** ScanActive() *******************")
-	defer exsrapi.PrintExf("ScanActive()")()
+	cmt0 := gschedule.Eventid
+	//	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := "ScanActive()"
+	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	defer exsrapi.PrintExf(cmt0, fncname)() 
 
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
@@ -1439,7 +1452,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	//	log.Println("ScanActive() idlist=", idlist)
 	if len(idlist) != 0 {
 		//	status = GetPointsAll(idlist, gschedule, cntrblist)
-		go GetPointsAll(client, idlist, gschedule, cntrblist)
+		GetPointsAll(client, idlist, gschedule, cntrblist)
 	}
 
 	return
@@ -1472,6 +1485,13 @@ func CopyScore(gschedule Gschedule) (status int) {
 
 	var stmt *sql.Stmt
 	var rows *sql.Rows
+
+	fncname := "GetConfirmed()"
+	cmt0 := gschedule.Eventid
+	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	defer exsrapi.PrintExf(cmt0, fncname)()
+
+
 
 	status = 0
 
@@ -1611,7 +1631,11 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	var roominflist GSE5Mlib.RoomInfoList
 	//	var roominf RoomInfo
 
-	log.Printf("**************** GetConfirmed() called.\n")
+	fncname := "GetConfirmed()"
+	cmt0 := gschedule.Eventid
+	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	defer exsrapi.PrintExf(cmt0, fncname)()
+
 
 	status = 0
 
@@ -1904,14 +1928,14 @@ func main() {
 				if ss < nextsec {
 					time.Sleep(time.Duration(nextsec-ss) * time.Second)
 				}
-				log.Printf(" eventid=%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
+				log.Printf("%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
 				switch gschedulelist[idx].Method {
 				case "GetScore":
-					ScanActive(client, gschedulelist[idx])
+					go ScanActive(client, gschedulelist[idx])
 				case "CopyScore":
-					CopyScore(gschedulelist[idx])
+					go CopyScore(gschedulelist[idx])
 				case "GetConfirmed":
-					GetConfirmed(gschedulelist[idx])
+					go GetConfirmed(gschedulelist[idx])
 				}
 				gschedulelist[idx].Done = true
 			} else {
