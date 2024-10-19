@@ -6,6 +6,9 @@ https://opensource.org/licenses/mit-license.php
 /*
 指定した時刻に指定したイベント、配信者の獲得ポイントを取得します。
 
+デーモンとして動かすことを前提としています。
+スケジュールはDB(event, eventuser)から読み込み、取得した獲得ポイントはDB（points）に書き込みます
+
 これは前バージョンと実行時パラメーター、入力ファイルの形式をあわせてあります。現在のバージョンではFDetailは機能しません。
 
 EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
@@ -134,13 +137,14 @@ import (
 	Ver. 021AG03	ScanActive()とGetPointsAll()にPrintExf()を導入する(出力形式を変更する)
 	Ver. 021AG04	GetPointsAll() イベントを途中で変えた50位より下位のルームを除外する
 	Ver. 021AH00	GetPointsAll()をsrapi.GetPointAllByApi()に変更する。ログ出力の形式をイベントIDを中心に統一する。
+	Ver. 021AJ00	毎分処理すべきタスクを確実に終了するためロジックを変更する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AH00"
+const version = "021AJ00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -637,9 +641,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//	cmt0 := gschedule.Eventid
 	//	fncname := exsrapi.FuncNameOfThisFunction() + "()"
 	//	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
-	//	defer exsrapi.PrintExf(cmt0, fncname)() 
-
-
+	//	defer exsrapi.PrintExf(cmt0, fncname)()
 
 	status = 0
 
@@ -695,7 +697,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			log.Printf("GetPointsAll() GetEventBlockRanking() err=[%s]\n", err.Error())
 		} else {
 			qlist = &qranking.Block_ranking_list
-			for i, ranking := range(qranking.Block_ranking_list) {
+			for i, ranking := range qranking.Block_ranking_list {
 				quno, _ := strconv.Atoi(ranking.Room_id)
 				qmap[quno] = i
 			}
@@ -722,11 +724,11 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		} else {
 			//	eventuserには存在する上位50位のデータには存在しないルーム
 			//	point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
-			point, rank, gap, _, eventid,  _, bid, err := srapi.GetPointByApi(client, userno)
+			point, rank, gap, _, eventid, _, bid, err := srapi.GetPointByApi(client, userno)
 			if err != nil {
 				continue
 			}
-			if eventid != eida[0] || ( len(eida) == 2 && blockid != 0 && bid != blockid) {
+			if eventid != eida[0] || (len(eida) == 2 && blockid != 0 && bid != blockid) {
 				//	イベントを変更した等、このイベントにはエントリーしていないルーム
 				//	GetPointsByAPI()で取得するeventidにはblock_idは入っていない
 				continue
@@ -1200,6 +1202,7 @@ func SaveScoremap() (status int) {
 	return
 }
 
+// デーモンをrestartしたときデータの継続性を確保するためのデータを読み込む
 func RestoreScoremap() (status int) {
 
 	status = 0
@@ -1404,8 +1407,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	//	fncname := exsrapi.FuncNameOfThisFunction() + "()"
 	fncname := "ScanActive()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
-	defer exsrapi.PrintExf(cmt0, fncname)() 
-
+	defer exsrapi.PrintExf(cmt0, fncname)()
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
 	stmt, srdblib.Dberr = srdblib.Db.Prepare(sqlstmt)
@@ -1490,8 +1492,6 @@ func CopyScore(gschedule Gschedule) (status int) {
 	cmt0 := gschedule.Eventid
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
-
-
 
 	status = 0
 
@@ -1636,7 +1636,6 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
-
 	status = 0
 
 	//	svtime := gschedule.Endtime.Add(1 * time.Second)
@@ -1689,11 +1688,17 @@ func GetEventInfo() {
 	return
 }
 */
-
+//  現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
 func GetSchedule() (
 	gschedulelist Gschedulelist,
 	status int,
 ) {
+
+	cmt0 := "=========="
+	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	//	fncname := "GetSchedule()"
+	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	defer exsrapi.PrintExf(cmt0, fncname)()
 
 	var stmt *sql.Stmt
 	var rows *sql.Rows
@@ -1703,6 +1708,7 @@ func GetSchedule() (
 
 	tnow := time.Now()
 
+	//	まだ終了日が来ていないイベントを探す
 	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus from event where endtime > ? "
 	stmt, Err := srdblib.Db.Prepare(sqlstmt)
 	if Err != nil {
@@ -1712,7 +1718,7 @@ func GetSchedule() (
 	}
 	defer stmt.Close()
 
-	//	48時間マイナスしてあるのは、翌日発表の確定値を取得する必要あるイベントも含めるため
+	//	現在時から48時間マイナスしてあるのは、翌日発表の確定値を取得する必要あるイベントも含めるため
 	rows, Err = stmt.Query(tnow.Add(-48 * time.Hour))
 	if Err != nil {
 		log.Printf("GetSchedule() Query() (6) err=%s\n", Err.Error())
@@ -1881,6 +1887,7 @@ func main() {
 	//      すべての処理が終了したらcookiejarを保存する。
 	defer jar.Save()
 
+	// デーモンをrestartしたときデータの継続性を確保するためのデータを読み込む
 	RestoreScoremap()
 
 	var gschedulelist Gschedulelist
@@ -1897,49 +1904,63 @@ func main() {
 
 	status := 0
 
-	//	outerloop:
 	for {
+		//  現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
+		//	このデータは随時更新可能なので、毎回取得する
 		gschedulelist, status = GetSchedule()
 		if status != 0 {
 			log.Printf("GetSchedule() status=%d\n", status)
 			return
 		}
 		//	fmt.Printf("now=%s t=%s status=%d len=%d\n", time.Now().Format("2006/01/02 15:04:05"), t.Format("2006/01/02 15:04:05"), status, len(gschedulelist))
-		for {
-			nextsec := 99
-			idx := -1
 
-			for i := 0; i < len(gschedulelist); i++ {
-				if gschedulelist[i].Done {
-					continue
-				}
-				if mm%gschedulelist[i].Intervalmin == gschedulelist[i].Modmin {
-					tnextsec := gschedulelist[i].Modsec
-					if tnextsec < nextsec {
-						nextsec = tnextsec
-						idx = i
+	outerloop:
+		for {
+			//  未処理のタスクがなくなるまで繰り返す
+
+			//  現在の分で実行が必要なタスクのなかから実行の秒がいちばん小さなタスクを見つける
+			for {
+				nextsec := 99
+				idx := -1
+
+				for i := 0; i < len(gschedulelist); i++ {
+					if gschedulelist[i].Done {
+						//	すでに実行されたタスク
+						continue
+					}
+					if mm%gschedulelist[i].Intervalmin == gschedulelist[i].Modmin {
+						tnextsec := gschedulelist[i].Modsec
+						if tnextsec < nextsec {
+							nextsec = tnextsec
+							idx = i
+						}
 					}
 				}
-			}
 
-			if idx > -1 {
-				//	hh, mm, ss = time.Now().Clock()
-				_, mm, ss = time.Now().Clock()
-				if ss < nextsec {
-					time.Sleep(time.Duration(nextsec-ss) * time.Second)
+				if idx > -1 {
+					//  処理すべきタスクが存在する
+					//	hh, mm, ss = time.Now().Clock()
+					_, tmm, tss := time.Now().Clock()
+					if tmm == mm && tss < nextsec {
+						//  まだ処理すべき秒に達していない
+						time.Sleep(time.Duration(nextsec-tss) * time.Second)
+					}
+					log.Printf("%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
+					switch gschedulelist[idx].Method {
+					case "GetScore":
+						//  獲得ポイント取得
+						go ScanActive(client, gschedulelist[idx])
+					case "CopyScore":
+						//	最終取得データのコピーを作成する（最終結果格納の準備）
+						go CopyScore(gschedulelist[idx])
+					case "GetConfirmed":
+						//  最終結果の取得
+						go GetConfirmed(gschedulelist[idx])
+					}
+					gschedulelist[idx].Done = true
+				} else {
+					break outerloop
 				}
-				log.Printf("%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
-				switch gschedulelist[idx].Method {
-				case "GetScore":
-					go ScanActive(client, gschedulelist[idx])
-				case "CopyScore":
-					go CopyScore(gschedulelist[idx])
-				case "GetConfirmed":
-					go GetConfirmed(gschedulelist[idx])
-				}
-				gschedulelist[idx].Done = true
-			} else {
-				break
 			}
 		}
 
@@ -1953,20 +1974,22 @@ func main() {
 		*/
 
 		//	毎分00秒になるまで待つ
-		_, _, ss = time.Now().Clock()
-		time.Sleep(time.Duration(61-ss) * time.Second)
+		_, tmm, tss := time.Now().Clock()
+		if tmm == mm {
+			time.Sleep(time.Duration(61-tss) * time.Second)
+		}
 		//	t = time.Now()
 		//	hh, mm, _ = time.Now().Clock()
 		_, mm, _ = time.Now().Clock()
-		hh24 := mm
-		if hh24 == 0 {
-			hh24 = 24
-		}
 		/*
-			if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
-				//	一定時間経ったら処理を終了する
-				break outerloop
+			hh24 := mm
+			if hh24 == 0 {
+				hh24 = 24
 			}
+				if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
+					//	一定時間経ったら処理を終了する
+					break outerloop
+				}
 		*/
 	}
 	//	log.Printf(" end time=%s\n", t.Format("2006-01-02 15:04:05"))
