@@ -138,13 +138,14 @@ import (
 	Ver. 021AG04	GetPointsAll() イベントを途中で変えた50位より下位のルームを除外する
 	Ver. 021AH00	GetPointsAll()をsrapi.GetPointAllByApi()に変更する。ログ出力の形式をイベントIDを中心に統一する。
 	Ver. 021AJ00	毎分処理すべきタスクを確実に終了するためロジックを変更する。
+	Ver. 021AJ01	exsrapi.FuncNameOfThisFunction()の仕様変更にともなってログ出力を修正する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AJ00"
+const version = "021AJ01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1404,8 +1405,8 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	var rows *sql.Rows
 
 	cmt0 := gschedule.Eventid
-	//	fncname := exsrapi.FuncNameOfThisFunction() + "()"
-	fncname := "ScanActive()"
+	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	//	fncname := "ScanActive()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
@@ -1488,7 +1489,10 @@ func CopyScore(gschedule Gschedule) (status int) {
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
-	fncname := "GetConfirmed()"
+	//	cmt0 := "=========="
+	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+
+	//	fncname := "GetConfirmed()"
 	cmt0 := gschedule.Eventid
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
@@ -1631,7 +1635,10 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	var roominflist GSE5Mlib.RoomInfoList
 	//	var roominf RoomInfo
 
-	fncname := "GetConfirmed()"
+	//	cmt0 := "=========="
+	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+
+	//	fncname := "GetConfirmed()"
 	cmt0 := gschedule.Eventid
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
