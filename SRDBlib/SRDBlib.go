@@ -220,7 +220,7 @@ func SelectEventNoAndName(eventid string) (
 	if err == nil {
 		return
 	} else {
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		if err.Error() != "sql: no rows in result set" {
 			status = -2
 			return
@@ -261,8 +261,8 @@ func SelectEventInf(eventid string) (eventinf Event_Inf, status int) {
 	)
 
 	if err != nil {
-		log.Printf("%s\n", sql)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s %s\n", eventid, sql)
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	if err.Error() != "sql: no rows in result set" {
 		status = -1
 		return
@@ -312,7 +312,7 @@ func SelectEventRoomInfList(
 
 	stmt, err := srdblib.Db.Prepare(sql)
 	if err != nil {
-		log.Printf("SelectEventRoomInfList() Prepare() err=%s\n", err.Error())
+		log.Printf("%s SelectEventRoomInfList() Prepare() err=%s\n", eventid, err.Error())
 		status = -5
 		return
 	}
@@ -320,7 +320,7 @@ func SelectEventRoomInfList(
 
 	rows, err := stmt.Query(eventid)
 	if err != nil {
-		log.Printf("SelectRoomIn() Query() (6) err=%s\n", err.Error())
+		log.Printf("%s SelectRoomIn() Query() (6) err=%s\n", eventid, err.Error())
 		status = -6
 		return
 	}
@@ -431,7 +431,7 @@ func SelectEventRoomInfList(
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Printf("SelectEventRoomInfList() rows err=%s\n", err.Error())
+		log.Printf("%s SelectEventRoomInfList() rows err=%s\n", eventid, err.Error())
 		status = -8
 		return
 	}
@@ -480,7 +480,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	stmt1, err := srdblib.Db.Prepare("SELECT count(*) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -490,7 +490,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	err = stmt1.QueryRow(userno, eventid).Scan(&norow)
 	if err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -504,7 +504,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	stmt1, err = srdblib.Db.Prepare("SELECT max(ts) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -514,7 +514,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	err = stmt1.QueryRow(userno, eventid).Scan(&tfinal)
 	if err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -546,7 +546,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	stmt2, err := srdblib.Db.Prepare("select ts, point from points where user_id = ? and eventid = ? order by ts")
 	if err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -555,7 +555,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	rows, err := stmt2.Query(userno, eventid)
 	if err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -565,7 +565,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 		err := rows.Scan(&t[i], &point[i])
 		if err != nil {
 			//	log.Fatal(err)
-			log.Printf("err=[%s]\n", err.Error())
+			log.Printf("%s err=[%s]\n", eventid, err.Error())
 			//	status = -1
 			return
 		}
@@ -574,7 +574,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	}
 	if err = rows.Err(); err != nil {
 		//	log.Fatal(err)
-		log.Printf("err=[%s]\n", err.Error())
+		log.Printf("%s err=[%s]\n", eventid, err.Error())
 		//	status = -1
 		return
 	}
@@ -599,7 +599,7 @@ func UpdatePointsSetQstatus(
 ) (status int) {
 	status = 0
 
-	log.Printf("  *** UpdatePointsSetQstatus() *** eventid=%s userno=%d\n", eventid, userno)
+	log.Printf("%s *** UpdatePointsSetQstatus() userno=%d\n", eventid, userno)
 
 	nrow := 0
 	//	err := Db.QueryRow("select count(*) from points where eventid = ? and user_id = ? and pstatus = 'Conf.'", eventid, userno).Scan(&nrow)
@@ -607,7 +607,7 @@ func UpdatePointsSetQstatus(
 	err := srdblib.Db.QueryRow(sql, eventid, userno).Scan(&nrow)
 
 	if err != nil {
-		log.Printf("select count(*) from user ... err=[%s]\n", err.Error())
+		log.Printf("%s select count(*) from user ... err=[%s]\n", eventid, err.Error())
 		status = -1
 		return
 	}
@@ -616,7 +616,7 @@ func UpdatePointsSetQstatus(
 		return
 	}
 
-	log.Printf("  *** UpdatePointsSetQstatus() Update!\n")
+	log.Printf("%s *** UpdatePointsSetQstatus() Update!\n", eventid)
 
 	sql = "update points set qstatus =?,"
 	sql += "qtime=? "
@@ -624,7 +624,7 @@ func UpdatePointsSetQstatus(
 	sql += "where user_id=? and eventid = ? and ( pstatus = 'Conf.' or pstatus = 'Prov.' )"
 	stmt, err := srdblib.Db.Prepare(sql)
 	if err != nil {
-		log.Printf("UpdatePointsSetQstatus() Update/Prepare err=%s\n", err.Error())
+		log.Printf("%s UpdatePointsSetQstatus() Update/Prepare err=%s\n", eventid, err.Error())
 		status = -1
 		return
 	}
@@ -633,7 +633,7 @@ func UpdatePointsSetQstatus(
 	_, err = stmt.Exec(point, tstart+"--"+tend, userno, eventid)
 
 	if err != nil {
-		log.Printf("error(UpdatePointsSetQstatus() Update/Exec) err=%s\n", err.Error())
+		log.Printf("%s error(UpdatePointsSetQstatus() Update/Exec) err=%s\n", eventid, err.Error())
 		status = -2
 	}
 
@@ -656,7 +656,7 @@ func MakePointPerSlot(eventid string) (perslotinflist []PerSlotInf, status int) 
 	_, sts := SelectEventRoomInfList(eventid, &roominfolist)
 
 	if sts != 0 {
-		log.Printf("status of SelectEventRoomInfList() =%d\n", sts)
+		log.Printf("%s status of SelectEventRoomInfList() = %d\n", eventid, sts)
 		status = sts
 		return
 	}

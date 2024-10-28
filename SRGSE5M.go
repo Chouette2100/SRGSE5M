@@ -142,13 +142,14 @@ import (
 	Ver. 021AK00	map を sync.Map に変更する
 	Ver. 021AL00	GetPointsAll()を分離する。指定順位範囲にあるルームは自動的にeventuserに追加する。
 	Ver. 021AL01	指定順位範囲にあるルームは自動的にeventuserに追加する。動作監視のためのログ出力を追加する
+	Ver. 021AL03	ログ出力を修正する（処理中のイベントのeventidを表示する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AL01"
+const version = "021AL03"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1059,65 +1060,6 @@ func CopyScore(gschedule Gschedule) (status int) {
 	return
 }
 
-func GetConfirmed(gschedule Gschedule) (status int) {
-
-	var eventinf GSE5Mlib.Event_Inf
-	var roominflist GSE5Mlib.RoomInfoList
-	//	var roominf RoomInfo
-
-	//	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
-
-	//	fncname := "GetConfirmed()"
-	cmt0 := gschedule.Eventid
-	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
-	defer exsrapi.PrintExf(cmt0, fncname)()
-
-	status = 0
-
-	//	svtime := gschedule.Endtime.Add(1 * time.Second)
-	svtime := gschedule.Endtime.Add(time.Duration(ConfirmedAt) * time.Second)
-	eventid := gschedule.Eventid
-	ieventid := gschedule.Ieventid
-
-	//	イベントに参加しているルームの一覧を取得します。
-	//	ルーム名、ID、URLを取得しますが、イベント終了直後の場合の最終獲得ポイントが表示されている場合はそれも取得します。
-	breg := 1
-	//	確定値（最終獲得ポイント）が発表されるのは30位まで。確定値が発表されないイベントもあるので要注意。
-	ereg := 30
-	isquest, status := GSE5Mlib.GetEventInfAndRoomList(eventid, ieventid, breg, ereg, &eventinf, &roominflist)
-
-	isconfirm := false
-	for i, roominf := range roominflist {
-
-		//	log.Printf(" i+1=%d, userno=%d, point=%d\n", i+1, roominf.Userno, roominf.Point)
-		if roominf.Point > 0 {
-			//	最終獲得ポイントが発表された場合のみ更新する
-			//	InsertIntoOrUpdatePoints(svtime, roominf.Userno, roominf.Point, i+1, 0, eventid, "Conf.", "", "", "")
-			InsertIntoOrUpdatePoints(svtime, roominf, i+1, 0, eventid, "Conf.", "", "", "")
-			isconfirm = true
-		}
-	}
-
-	log.Printf("  isconfirm =%t, isquest=%t\n", isconfirm, isquest)
-	if isconfirm || isquest {
-		sqlstmt := "update event set rstatus = ? where eventid = ?"
-		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmt, "Confirmed", eventid)
-
-		if srdblib.Dberr != nil {
-			log.Printf("GetConfirmed() update event err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-			return
-		}
-
-		if isconfirm {
-			SRDBlib.MakePointPerSlot(eventid)
-		}
-	}
-
-	return
-
-}
 
 /*
 func GetEventInfo() {

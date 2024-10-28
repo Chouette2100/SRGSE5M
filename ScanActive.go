@@ -100,10 +100,10 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	}
 
 	//	log.Println("ScanActive() idlist=", idlist)
-	if len(idlist) != 0 {
+	//	if len(idlist) != 0 {
 		//	status = GetPointsAll(idlist, gschedule, cntrblist)
 		GetPointsAll(client, idlist, gschedule, cntrblist)
-	}
+	//	}
 
 	return
 
@@ -121,6 +121,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	status = 0
 
+	eventid := gschedule.Eventid
+
 	//	if gschedule.Eventid != "greatdetective?block_id=0" {
 	//		return
 	//	}
@@ -131,20 +133,20 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//	timestamp := InsertSampleTimeIntoTimeacqTable()
 	timestamp := time.Now().Truncate(time.Second)
 	if timestamp.After(gschedule.Endtime.Add(time.Duration(gschedule.Intervalmin+1) * time.Minute)) {
-		log.Printf("set rstatus = DontGetScore eventid=%s\n", gschedule.Eventid)
+		log.Printf("%s set rstatus = DontGetScore.\n", eventid)
 		sqlstmte := "update event set rstatus = ? where eventid = ?"
 		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
 
 		if srdblib.Dberr != nil {
-			log.Printf("GetPointsAll() update event err=[%s]\n", srdblib.Dberr.Error())
+			log.Printf("%s GetPointsAll() update event err=[%s]\n", eventid, srdblib.Dberr.Error())
 		}
 	}
 
-	Length := len(IdList)
+	//	Length := len(IdList)
 
-	if Length == 0 {
-		return
-	}
+	//	if Length == 0 {
+	//		return
+	//	}
 
 	//	以下の二つの理由でIdListのmapを作っておく
 	//		指定した順位の範囲のルームがIdListに存在するかチェックする
@@ -167,13 +169,14 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//  TODO: イベント終了後も取得可能なのでは？
 	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
 	if err != nil {
-		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
+		log.Printf("%s GetPointsAll() GetEventsRankingByApi() err=[%s]\n", eventid, err.Error())
 		return -1
 	}
 
-	log.Printf("GetPointsAll() GetEventsRankingByApi() =%d\n", len(pranking.Ranking))
+	log.Printf("%s GetPointsAll() GetEventsRankingByApi() =%d\n", eventid, len(pranking.Ranking))
 
 	if len(pranking.Ranking) == 0 {
+		//	レベルイベント（GetEventsRankingByApi()で獲得ポイントを取得できない）
 		roomlistinf, err := srapi.GetRoominfFromEventByApi(
 			client,
 			gschedule.Ieventid, //	Event_id (int)
@@ -182,10 +185,10 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		)
 		if err != nil {
 			err = fmt.Errorf("srapi.GetRoominfFromEventByApi() returned error. %w", err)
-			log.Printf("GetPointsAll() srapi.GetRoominfFromEventByApi() err=[%s]\n", err.Error())
+			log.Printf("%s GetPointsAll() srapi.GetRoominfFromEventByApi() err=[%s]\n", eventid, err.Error())
 		}
 
-		log.Printf("GetPointsAll() srapi.GetRoominfFromEventByApi() =%d\n", len(roomlistinf.RoomList))
+		log.Printf("%s GetPointsAll() srapi.GetRoominfFromEventByApi() =%d\n", eventid, len(roomlistinf.RoomList))
 
 		for _, room := range roomlistinf.RoomList {
 			userno := room.Room_id
@@ -211,7 +214,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		blockid, _ = strconv.Atoi(eida[1])
 		qranking, err := srapi.GetEventBlockRanking(client, gschedule.Ieventid, blockid, 1, 100)
 		if err != nil {
-			log.Printf("GetPointsAll() GetEventBlockRanking() err=[%s]\n", err.Error())
+			log.Printf("%s GetPointsAll() GetEventBlockRanking() err=[%s]\n", eventid, err.Error())
 		} else {
 			qlist = &qranking.Block_ranking_list
 			for i, ranking := range qranking.Block_ranking_list {
@@ -251,13 +254,19 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		}
 		userno := ranking.Room.RoomID
 		if _, ok := umap[userno]; !ok {
-			log.Printf("GetPointsAll() userno=%d is not in IdList\n", userno)
+			log.Printf("%s GetPointsAll() userno=%d is not in IdList\n", eventid, userno)
 			srdblib.UpinsEventuser(client, ranking.Rank, ranking.Point, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
 			IdList = append(IdList, strconv.Itoa(userno))
 		}
 	}
 
-	log.Printf("GetPointsAll() GetPointsAll() =%+v\n", IdList)
+	//	log.Printf("%s GetPointsAll() GetPointsAll() =%+v\n", eventid, IdList)
+
+	Length := len(IdList)
+	if Length == 0 {
+		//	取得対象が存在しない	
+		return
+	}
 
 	for i, ranking := range pranking.Ranking {
 		pmap[ranking.Room.RoomID] = i
@@ -274,16 +283,16 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		if _, ok := pmap[userno]; ok {
 			continue
 		} else {
-			log.Printf("GetPointsAll() userno=%d is not in pranking\n", userno)
+			log.Printf("%s GetPointsAll() userno=%d is not in pranking\n", eventid, userno)
 			//	eventuserには存在するが上位50位のデータには存在しないルーム
 			//	point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
-			point, rank, gap, _, eventid, _, bid, err := srapi.GetPointByApi(client, userno)
+			point, rank, gap, _, teventid, _, bid, err := srapi.GetPointByApi(client, userno)
 			if err != nil {
-				log.Printf("GetPointsAll() GetPointByApi() userno=%d err=[%s]\n", userno, err.Error())
+				log.Printf("%s GetPointsAll() GetPointByApi() userno=%d err=[%s]\n", eventid, userno, err.Error())
 				continue
 			}
-			if eventid != eida[0] || (len(eida) == 2 && blockid != 0 && bid != blockid) {
-				log.Printf("GetPointsAll() GetPointByApi() userno=%d eventid=%s blockid=%d\n", userno, eventid, bid)
+			if teventid != eida[0] || (len(eida) == 2 && blockid != 0 && bid != blockid) {
+				log.Printf("%s GetPointsAll() GetPointByApi() userno=%d teventid=%s bid=%d\n", eventid, userno, teventid, bid)
 				//	イベントを変更した等、このイベントにはエントリーしていないルーム
 				//	GetPointsByAPI()で取得するeventidにはblock_idは入っていない
 				continue
@@ -304,20 +313,20 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	var tx *sql.Tx
 	tx, srdblib.Dberr = srdblib.Db.Begin()
 	if srdblib.Dberr != nil {
-		log.Printf("GetPointsAll() begin err=[%s]\n", srdblib.Dberr.Error())
+		log.Printf("%s GetPointsAll() begin err=[%s]\n", eventid, srdblib.Dberr.Error())
 		return -1
 	}
 	defer tx.Rollback()
 
 	//	pstatus := "n/a"
 	//	ptime := ""
-	//	log.Printf("%+v\n", IdList)
+	//	log.Printf("%s %+v\n", eventid, IdList)
 	for i := 0; i < Length; i++ {
 		//	for i, p := range(plist) {
 
 		//	var makePQ func()
 		id, _ := strconv.Atoi(IdList[i])
-		//	log.Printf("id=%d\n", id)
+		//	log.Printf("%s id=%d\n", eventid, id)
 		//	id := p.User_id
 
 		//	開催されていないイベントに対する設定を兼ねる変数定義
@@ -342,7 +351,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 					//	ブロックIDが0の場合はGetPointByApi()で取得した順位がエントリーしたブロックでの順位であることに注意
 					//	OPTIMIZE: 以下の処理はブロックIDがが0で順位が50位より下のケース、工夫が足りない？
 					if idxq, ok := qmap[uno]; ok {
-						//	log.Printf(" rank=%d, qrank=%d\n", rank, (*qlist)[idxq].Rank)
+						//	log.Printf("%s rank=%d, qrank=%d\n", eventid, rank, (*qlist)[idxq].Rank)
 						rank = (*qlist)[idxq].Rank
 					} else {
 						rank = 9999
@@ -463,7 +472,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			}
 			//	isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, IdList[i])
 			//	if status != 0 {
-			//		log.Printf("GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", status)
+			//		log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
 			//		//	continue
 			isonlive = false
 			startedat = time.Now()
@@ -579,7 +588,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 									if time.Until(gschedule.Endtime) > 5 * time.Minute {
 									} else {
 										//	配信終了直前では獲得ポイントの更新は行われなくなるが貢献ポイントは更新されるはず (RU20G3)
-										log.Printf(" time.Until(gschedule.Endtime) < 5 * time.Minute\n")
+										log.Printf("%s time.Until(gschedule.Endtime) < 5 * time.Minute\n", %s)
 										InsertIntoTimeTable(eventid, id, timestamp.Add(15 * time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, (*scoremap[id]).Tend)
 									}
 								*/
@@ -601,7 +610,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 						DeleteFromPoints(tx, eventid, p.(*LastScore).ts, id)
 						ptime = ""
 						pstatus = "="
-						//	log.Printf(" eventid=%s %s Dup=%d %8d%7d %s deleted.\n", eventid, timestamp.Format("15:04:05"), (*scoremap[id]).Dup, point, id, eventid)
+						//	log.Printf("%s %s Dup=%d %8d%7d %s deleted.\n", eventid, timestamp.Format("15:04:05"), (*scoremap[id]).Dup, point, id, eventid)
 					}
 					p.(*LastScore).Dup += 1
 					//	(*scoremap[id]).Sum0 = 0
@@ -684,7 +693,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 				}
 
-				//	log.Printf("different data idx=%d, eventid=%s, user_id=%d point=%d\n", idx, eventid, id, point)
+				//	log.Printf("%s different data idx=%d, eventid=%s, user_id=%d point=%d\n", eventid, idx, eventid, id, point)
 				log.Printf("%s %s Diff.%8d%7d %s %s\n", eventid, timestamp.Format("15:04:05"), point, id, ptime, pstatus)
 				p.(*LastScore).Score = point
 				p.(*LastScore).Rank = rank
@@ -694,7 +703,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			}
 		} else {
 			//	ユーザの獲得ポイント履歴がない。新しく作ります。
-			//	log.Printf("new data idx=%d, user_id=%d point=%d\n", idx, id, point)
+			//	log.Printf("%s new data idx=%d, user_id=%d point=%d\n", eventid, idx, id, point)
 			log.Printf("%s %s *New*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
 			var score LastScore
 			score.Eventid = gschedule.Eventid
@@ -720,7 +729,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			scoremap.Store(id, &score)
 
 			//	ptime = ""
-			//	log.Printf("scoremap[%d]=%v\n", id, scoremap[id])
+			//	log.Printf("%s scoremap[%d]=%v\n", eventid, id, scoremap[id])
 		}
 
 		log.Printf("%s id=%d point=%d rank=%d\n", eventid, id, point, rank)
