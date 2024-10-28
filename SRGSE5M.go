@@ -141,13 +141,14 @@ import (
 	Ver. 021AJ01	exsrapi.FuncNameOfThisFunction()の仕様変更にともなってログ出力を修正する
 	Ver. 021AK00	map を sync.Map に変更する
 	Ver. 021AL00	GetPointsAll()を分離する。指定順位範囲にあるルームは自動的にeventuserに追加する。
+	Ver. 021AL01	指定順位範囲にあるルームは自動的にeventuserに追加する。動作監視のためのログ出力を追加する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AL00"
+const version = "021AL01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

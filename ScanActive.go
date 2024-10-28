@@ -146,6 +146,15 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		return
 	}
 
+	//	以下の二つの理由でIdListのmapを作っておく
+	//		指定した順位の範囲のルームがIdListに存在するかチェックする
+	//		データ保存済みのルームをマークする
+	umap := make(map[int]bool)
+	for _, uno := range IdList {
+		userno, _ := strconv.Atoi(uno)
+		umap[userno] = false
+	}
+
 	//	eventid := gschedule.Eventid
 	//	eida := strings.Split(eventid, "?")
 	var pranking *srapi.Eventranking
@@ -160,6 +169,35 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	if err != nil {
 		log.Printf("GetPointsAll() GetEventsRankingByApi() err=[%s]\n", err.Error())
 		return -1
+	}
+
+	log.Printf("GetPointsAll() GetEventsRankingByApi() =%d\n", len(pranking.Ranking))
+
+	if len(pranking.Ranking) == 0 {
+		roomlistinf, err := srapi.GetRoominfFromEventByApi(
+			client,
+			gschedule.Ieventid, //	Event_id (int)
+			gschedule.Fromorder,
+			gschedule.Toorder,
+		)
+		if err != nil {
+			err = fmt.Errorf("srapi.GetRoominfFromEventByApi() returned error. %w", err)
+			log.Printf("GetPointsAll() srapi.GetRoominfFromEventByApi() err=[%s]\n", err.Error())
+		}
+
+		log.Printf("GetPointsAll() srapi.GetRoominfFromEventByApi() =%d\n", len(roomlistinf.RoomList))
+
+		for _, room := range roomlistinf.RoomList {
+			userno := room.Room_id
+			if _, ok := umap[userno]; !ok {
+				srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
+				IdList = append(IdList, strconv.Itoa(userno))
+			}
+			//	cntrblist := append(cntrblist, "N")
+			//	//		GetPointsAll(idlist, gschedule, cntrblist)
+			//	GetPointsAll(client, idlist, gschedule, cntrblist)
+			//	time.Sleep(time.Duration(gschedule.Intervalmin+1) * time.Minute)
+		}
 	}
 
 	//	ブロックイベントのときは100位までの順位を取得する
@@ -198,16 +236,6 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//	取得したprankingからIdListに該当するもので未保存のものを保存する
 	//	umap:	[100]=true, [200]=true, [101]=true, [102]=true, [103]=true
 
-	//	以下の二つの理由でIdListのmapを作っておく
-	//		指定した順位の範囲のルームがIdListに存在するかチェックする
-	//		データ保存済みのルームをマークする
-	umap := make(map[int]bool)
-	for _, uno := range IdList {
-		userno, _ := strconv.Atoi(uno)
-		umap[userno] = false
-	}
-
-
 	//	usernoから結果を取得できるようにmapを作っておく
 	plist := make([]srdblib.Points, 0, 50)
 	pmap := make(map[int]int)
@@ -229,6 +257,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		}
 	}
 
+	log.Printf("GetPointsAll() GetPointsAll() =%+v\n", IdList)
+
 	for i, ranking := range pranking.Ranking {
 		pmap[ranking.Room.RoomID] = i
 		plist = append(plist, srdblib.Points{
@@ -244,13 +274,16 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		if _, ok := pmap[userno]; ok {
 			continue
 		} else {
+			log.Printf("GetPointsAll() userno=%d is not in pranking\n", userno)
 			//	eventuserには存在するが上位50位のデータには存在しないルーム
 			//	point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
 			point, rank, gap, _, eventid, _, bid, err := srapi.GetPointByApi(client, userno)
 			if err != nil {
+				log.Printf("GetPointsAll() GetPointByApi() userno=%d err=[%s]\n", userno, err.Error())
 				continue
 			}
 			if eventid != eida[0] || (len(eida) == 2 && blockid != 0 && bid != blockid) {
+				log.Printf("GetPointsAll() GetPointByApi() userno=%d eventid=%s blockid=%d\n", userno, eventid, bid)
 				//	イベントを変更した等、このイベントにはエントリーしていないルーム
 				//	GetPointsByAPI()で取得するeventidにはblock_idは入っていない
 				continue
