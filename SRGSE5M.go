@@ -142,14 +142,15 @@ import (
 	Ver. 021AK00	map を sync.Map に変更する
 	Ver. 021AL00	GetPointsAll()を分離する。指定順位範囲にあるルームは自動的にeventuserに追加する。
 	Ver. 021AL01	指定順位範囲にあるルームは自動的にeventuserに追加する。動作監視のためのログ出力を追加する
-	Ver. 021AL03	ログ出力を修正する（処理中のイベントのeventidを表示する。
+	Ver. 021AL03	ログ出力を修正する（処理中のイベントのeventidを表示する。登録直後で取得対象がないときも取得対象のチェックを行う。
+	Ver. 021AL04	レベルイベントで獲得ポイントが0のルームを除外する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AL03"
+const version = "021AL04"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -826,7 +827,7 @@ func MakeComment() (status int) {
 
 	})
 
-	log.Printf("idxtid=%d\n", idxtid)
+	//	log.Printf("idxtid=%d\n", idxtid)
 
 	if idxtid < 0 {
 		return
@@ -858,7 +859,7 @@ func MakeComment() (status int) {
 		ib = 6
 	}
 
-	log.Printf("ib=%d\n", ib)
+	//	log.Printf("ib=%d\n", ib)
 
 	file, err := os.OpenFile("comment.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 	if err != nil {

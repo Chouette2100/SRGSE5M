@@ -191,6 +191,9 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		log.Printf("%s GetPointsAll() srapi.GetRoominfFromEventByApi() =%d\n", eventid, len(roomlistinf.RoomList))
 
 		for _, room := range roomlistinf.RoomList {
+			if room.Rank == 0 {
+				break
+			}
 			userno := room.Room_id
 			if _, ok := umap[userno]; !ok {
 				srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
