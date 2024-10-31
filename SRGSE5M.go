@@ -146,13 +146,14 @@ import (
 	Ver. 021AL04	レベルイベントで獲得ポイントが0のルームを除外する
 	Ver. 021AL05	レベルイベントで獲得ポイントが0のルームを除外する(2)
 	Ver. 021AL06	ログ出力を datetime eventid userno の形に統一する
+	Ver. 021AM00	GetPointsAll()でLengthをlenghthとする（Goルーチンとなっているところでやってはいけない）
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AL06"
+const version = "021AM00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

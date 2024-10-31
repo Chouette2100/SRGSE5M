@@ -133,6 +133,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//	timestamp := InsertSampleTimeIntoTimeacqTable()
 	timestamp := time.Now().Truncate(time.Second)
 	if timestamp.After(gschedule.Endtime.Add(time.Duration(gschedule.Intervalmin+1) * time.Minute)) {
+		//	イベントが終了した
 		log.Printf("%s set rstatus = DontGetScore.\n", eventid)
 		sqlstmte := "update event set rstatus = ? where eventid = ?"
 		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
@@ -142,31 +143,22 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 		}
 	}
 
-	//	Length := len(IdList)
-
-	//	if Length == 0 {
-	//		return
+	//	if gschedule.Starttime.After(timestamp) {
+	//		log.Printf(" NotInProgress\n")
 	//	}
 
-	//	以下の二つの理由でIdListのmapを作っておく
-	//		指定した順位の範囲のルームがIdListに存在するかチェックする
-	//		データ保存済みのルームをマークする
+	//	指定した順位の範囲のルームがIdListに存在するかチェックするためIdListのmapを作っておく
+	//		IdListはこの時点でeventuserに存在するルームのuserno（をstringで表現したもの）
 	umap := make(map[int]bool)
 	for _, uno := range IdList {
 		userno, _ := strconv.Atoi(uno)
 		umap[userno] = false
 	}
 
-	//	eventid := gschedule.Eventid
-	//	eida := strings.Split(eventid, "?")
 	var pranking *srapi.Eventranking
-	//	pmap := make(map[int]int)
-	//	var qranking *srapi.EventBlockRanking
-	//	plist := make([]srdblib.Points, 100)
 	var err error
-	//	50位までのルームの順位、ポイントを取得する。
-	//	イベント開催中でない場合はエラーとなる
-	//  TODO: イベント終了後も取得可能なのでは？
+
+	//	50位までのルームの順位、ポイントを取得する(ランキングイベントに限る)
 	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
 	if err != nil {
 		log.Printf("%s GetEventsRankingByApi() err=[%s]\n", eventid, err.Error())
@@ -177,11 +169,11 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	islevel := false
 	if len(pranking.Ranking) == 0 {
-		islevel = true
 		//	レベルイベント（GetEventsRankingByApi()で獲得ポイントを取得できない）
+		islevel = true
 		roomlistinf, err := srapi.GetRoominfFromEventByApi(
 			client,
-			gschedule.Ieventid, //	Event_id (int)
+			gschedule.Ieventid, //	Event_id (int) event_url_key ではないことに注意
 			gschedule.Fromorder,
 			gschedule.Toorder,
 		)
@@ -212,6 +204,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//	ブロックイベントのときは100位までの順位を取得する
 	//	block_id ==0 のときは51位より下位のルームの順位はこの方法でないとわからない
 	//	またusernoから順位を取得できるようにmapを作っておく
+	//	OPTIMIZE: ここの処理はblock_id=0のとき必要ないはず？
 	eida := strings.Split(gschedule.Eventid, "?block_id=")
 	qmap := make(map[int]int)
 	blockid := -1
@@ -229,37 +222,24 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 			}
 		}
 	}
-	//	Fromorder: 1, Toorder: 4
 
-	//	IdListからumapを作る
-	//	IdList:   100, 101, 102, 103
-	//	umap:  [100]=false, [101]=false, [102]=false, [103]=false
-	//
-	//  pranking: 100, 200, 101, 102, 300, 103,...
-
-	//  pranking: 100, 200, 101, 102, 300, 103,...
-	//	Fromorder、Toorderの範囲のprankingのデータを保存する
-	//	umap:	[100]=true, [200]=true, [101]=true, [102]=true
-	//	pmap: [100]=0, [200]=1, [101]=2, [102]=3, [300]=4, [103]=5
-
-	//	取得したprankingからIdListに該当するもので未保存のものを保存する
-	//	umap:	[100]=true, [200]=true, [101]=true, [102]=true, [103]=true
-
-	//	usernoから結果を取得できるようにmapを作っておく
 	plist := make([]srdblib.Points, 0, 50)
 	pmap := make(map[int]int)
 
 	//	指定した範囲の順位にあるルームのポイントを保存する。
 	for i := gschedule.Fromorder - 1; i < gschedule.Toorder; i++ {
 		if i >= len(pranking.Ranking) {
+			//	レベルイベントの場合は最初からこの条件にあてはまる
 			break
 		}
 		ranking := pranking.Ranking[i]
 		if ranking.Point == 0 {
+			//	pranking.Rankingはポイント順に逆ソートされているので獲得ポイントが0のデータがあれば以下は処理の対象としない
 			break
 		}
 		userno := ranking.Room.RoomID
 		if _, ok := umap[userno]; !ok {
+			//	eventuserには存在しないルーム
 			log.Printf("%s id=%6d is not in IdList\n", eventid, userno)
 			srdblib.UpinsEventuser(client, ranking.Rank, ranking.Point, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
 			IdList = append(IdList, strconv.Itoa(userno))
@@ -268,8 +248,8 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 
 	//	log.Printf("%s GetPointsAll() GetPointsAll() =%+v\n", eventid, IdList)
 
-	Length := len(IdList)
-	if Length == 0 {
+	length := len(IdList)
+	if length == 0 {
 		//	取得対象が存在しない	
 		return
 	}
@@ -335,7 +315,7 @@ func GetPointsAll(client *http.Client, IdList []string, gschedule Gschedule, cnt
 	//	pstatus := "n/a"
 	//	ptime := ""
 	//	log.Printf("%s %+v\n", eventid, IdList)
-	for i := 0; i < Length; i++ {
+	for i := 0; i < length; i++ {
 		//	for i, p := range(plist) {
 
 		//	var makePQ func()
