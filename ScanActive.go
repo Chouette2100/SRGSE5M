@@ -155,6 +155,9 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		umap[userno] = false
 	}
 
+	//	eventuserにあるルームのみで作ったmap
+	umap_eu := umap
+
 	var pranking *srapi.Eventranking
 	var err error
 
@@ -195,6 +198,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			if _, ok := umap[userno]; !ok {
 				//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
 				idList = append(idList, strconv.Itoa(userno))
+				cntrblist = append(cntrblist, "N")
 			}
 			//	cntrblist := append(cntrblist, "N")
 			//	//		GetPointsAll(idlist, gschedule, cntrblist)
@@ -246,6 +250,8 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			log.Printf("%s id=%6d is not in idList\n", eventid, userno)
 			//	srdblib.UpinsEventuser(client, ranking.Rank, ranking.Point, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
 			idList = append(idList, strconv.Itoa(userno))
+			cntrblist = append(cntrblist, "N")
+
 		}
 	}
 	//	}
@@ -492,7 +498,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		if p, ok := scoremap.Load(id); ok {
 			if p.(*LastScore).Eventid != gschedule.Eventid {
 				//	scoremap[]にあるイベントが取得対象のイベントと違う ＝  取得対象イベントでの初めてのデータ取得
-				log.Printf("%s %s *Chg*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
+				log.Printf("%s id=%6d %s *Chg*%8d\n", eventid, id, timestamp.Format("15:04:05"), point)
 				var score LastScore
 				score.Eventid = gschedule.Eventid
 				score.Score = point
@@ -547,14 +553,14 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 						//	(*scoremap[id]).Qtime = (*scoremap[id]).Tstart0.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second).Format("01/02 15:04") + "--" + timestamp.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second-delay).Format("15:04")
 						ststart0 := p.(*LastScore).Tstart0.Format("01/02 15:04")
 						stend := p.(*LastScore).Tend.Format("15:04")
-						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
+						log.Printf("%s id=%6d ststart0 = [%s] stend = [%s]\n", eventid, id, ststart0, stend)
 						if ststart0 == "01/01 00:00" {
 							ststart0 = ""
 						}
 						if stend == "00:00" {
 							stend = ""
 						}
-						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
+						log.Printf("%s id=%6d ststart0 = [%s] stend = [%s]\n", eventid, id, ststart0, stend)
 						if ststart0 != "" || stend != "" {
 							p.(*LastScore).Qtime = ststart0 + "--" + stend
 						} else {
@@ -597,7 +603,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 
 						ptime = ""
 						pstatus = "="
-						log.Printf("%s p = [%s], [%s] q= [%s], [%s]\n", eventid, pstatus, ptime, p.(*LastScore).Qstatus, p.(*LastScore).Qtime)
+						log.Printf("%s id=%6d p = [%s], [%s] q= [%s], [%s]\n", eventid, id, pstatus, ptime, p.(*LastScore).Qstatus, p.(*LastScore).Qtime)
 
 						//	(*scoremap[id]).Dup += 1
 						p.(*LastScore).Sum0 = 0
@@ -702,14 +708,15 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		} else {
 			//	ユーザの獲得ポイント履歴がない。新しく作ります。
 
-			if point == 0 {
+			_, ok  := umap_eu[id]
+			if !ok && point == 0 {
 				//	履歴にないルームのpointが0のときはpointを保存しない
 				continue
 			}
 			srdblib.UpinsEventuser(client, rank, point, gschedule.Eventid, gschedule.Starttime, id, timestamp)
 
 			//	log.Printf("%s new data idx=%d, user_id=%6d point=%d\n", eventid, idx, id, point)
-			log.Printf("%s %s *New*%8d%7d %s\n", eventid, timestamp.Format("15:04:05"), point, id, eventid)
+			log.Printf("%s id=%6d %s *New*%8d\n", eventid, id, timestamp.Format("15:04:05"), point)
 			var score LastScore
 			score.Eventid = gschedule.Eventid
 			score.Score = point

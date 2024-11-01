@@ -148,13 +148,15 @@ import (
 	Ver. 021AL06	ログ出力を datetime eventid userno の形に統一する
 	Ver. 021AM00	GetPointsAll()でLengthをlenghthとする（Goルーチンとなっているところでやってはいけない）
 	Ver. 021AN00	履歴にないルームのpointが0のときはpointを保存しない
+	Ver. 021AN01	eventuserにすでに登録されてルームはポイントデータ取得対象とする、cntrblistをidlistの同様に拡張する。
+	Ver. 021AN02	GetPointsAll()のログ出力をeventid id=userno ..... の形に変更する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AN00"
+const version = "021AN02"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1240,8 +1242,9 @@ func main() {
 		//	毎分00秒になるまで待つ
 		_, tmm, tss := time.Now().Clock()
 		w := 60 - tss
-		if tmm == mm {
-			if w > 30 {
+		if tmm == mm  {
+			if w > 30 && tmm % 5 == 0 {
+				time.Sleep(5 * time.Second)
 				SaveScoremap()
 			}
 			time.Sleep(time.Duration(w) * time.Second)
