@@ -150,13 +150,14 @@ import (
 	Ver. 021AN00	履歴にないルームのpointが0のときはpointを保存しない
 	Ver. 021AN01	eventuserにすでに登録されてルームはポイントデータ取得対象とする、cntrblistをidlistの同様に拡張する。
 	Ver. 021AN02	GetPointsAll()のログ出力をeventid id=userno ..... の形に変更する。
+	Ver. 021AP00	GetPointsAll()のログ出力をeventid id=userno ..... の形に変更する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AN02"
+const version = "021AP00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

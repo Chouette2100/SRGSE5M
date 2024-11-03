@@ -114,23 +114,10 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 */
 func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cntrblist []string) (status int) {
 
-	//	cmt0 := gschedule.Eventid
-	//	fncname := exsrapi.FuncNameOfThisFunction() + "()"
-	//	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
-	//	defer exsrapi.PrintExf(cmt0, fncname)()
-
 	status = 0
 
 	eventid := gschedule.Eventid
 
-	//	if gschedule.Eventid != "greatdetective?block_id=0" {
-	//		return
-	//	}
-
-	//	wtdp := 2
-	//	delay := time.Duration((wtdp+1)*gschedule.Intervalmin) * time.Minute
-
-	//	timestamp := InsertSampleTimeIntoTimeacqTable()
 	timestamp := time.Now().Truncate(time.Second)
 	if timestamp.After(gschedule.Endtime.Add(time.Duration(gschedule.Intervalmin+1) * time.Minute)) {
 		//	イベントが終了した
@@ -142,10 +129,6 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			log.Printf("%s update event err=[%s]\n", eventid, srdblib.Dberr.Error())
 		}
 	}
-
-	//	if gschedule.Starttime.After(timestamp) {
-	//		log.Printf(" NotInProgress\n")
-	//	}
 
 	//	指定した順位の範囲のルームがidListに存在するかチェックするためidListのmapを作っておく
 	//		idListはこの時点でeventuserに存在するルームのuserno（をstringで表現したもの）
@@ -207,7 +190,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		}
 	}
 
-	//	ブロックイベントのときは100位までの順位を取得する
+	//	block_id ==0 のブロックイベントのときは100位までの順位を取得する
 	//	block_id ==0 のときは51位より下位のルームの順位はこの方法でないとわからない
 	//	またusernoから順位を取得できるようにmapを作っておく
 	//	OPTIMIZE: ここの処理はblock_id=0のとき必要ないはず？
@@ -366,33 +349,11 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				//		//	ランキングイベントで50位以内にないルームとレベルイベント-のルームの情報は個別に取得する。
 				//		point, rank, gap, eventid = GSE5Mlib.GetPointsByAPI(idList[i])
 			}
-			/*
-				eida := strings.Split(eventid, "?block_id=")
-				gida := strings.Split(gschedule.Eventid, "?block_id=")
-				if len(eida) == 2 && eida[0] == gida[0] {
-					//	この条件は暫定
-					//	下記の条件に加え、?block_id=0 がついていないイベントIDもブロックイベント全体を示すことを含んでいる。
-					//	（これは一時的な回避方法で発生した）
-					//	正しくは
-					//	if len(gida) == 2 && len(eida) == 2 && gida[1] == 0 && eida[0] == gida[0] {
-					//	bloc_id=0 はブロックイベントに含まれるすべてのイベントを意味している。
-					eventid = gschedule.Eventid
-
-					//	len(gida) == 2 のとき
-					//		gida[1] != "0" ならば通常のブロックイベント
-					//		gida[1] == "0" ならばそのイベントに属するすべてのイベントをまとめたもの
-					//			ここで eida[1] != "0" であれば個別のイベントの結果を取得したことになるので rank = 0 とする
-					//	len(gida) ==1 && eida[1] != "0" の場合も同様
-					if eida[1] != "0" && (len(gida) == 1 || len(gida) == 2 && gida[1] == "0") {
-						rank = 0
-					}
-				}
-			*/
 			//	if !strings.Contains(eventid, gschedule.Eventid) {
 			if !strings.Contains(gschedule.Eventid, eventid) {
 				//	イベントがデータ取得対象のイベントではない
 				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
-				log.Printf("%s isn't gschedule.Eventid(%s) .\n", eventid, gschedule.Eventid)
+				log.Printf("%s id=%6d isn't gschedule.Eventid(%s) .\n", eventid, id, gschedule.Eventid)
 				dup := -9
 				//	if _, ok := scoremap[id]; ok {
 				//		dup = scoremap[id].Dup
@@ -425,7 +386,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 						log.Printf("%s id=%6d !isonlive\n", eventid, id)
 						//	if _, ok := scoremap[id]; !ok {
 						if _, ok := scoremap.Load(id); !ok {
-							log.Printf("%s scoremap[%d] not found.\n", eventid, id)
+							log.Printf("%s id=%6d scoremap not found.\n", eventid, id)
 							return
 						}
 
