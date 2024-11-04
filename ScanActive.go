@@ -133,13 +133,13 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	//	指定した順位の範囲のルームがidListに存在するかチェックするためidListのmapを作っておく
 	//		idListはこの時点でeventuserに存在するルームのuserno（をstringで表現したもの）
 	umap := make(map[int]bool)
+	//	eventuserにあるルームのみで作ったmap
+	umap_eu := make(map[int]bool)
 	for _, uno := range idList {
 		userno, _ := strconv.Atoi(uno)
 		umap[userno] = false
+		umap_eu[userno] = false
 	}
-
-	//	eventuserにあるルームのみで作ったmap
-	umap_eu := umap
 
 	var pranking *srapi.Eventranking
 	var err error
@@ -296,6 +296,13 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		}
 
 	}
+
+	type newuser struct {
+		userno int
+		rank   int
+		point  int
+	}
+	nu := make([]newuser, 0, 50)
 
 	var tx *sql.Tx
 	tx, srdblib.Dberr = srdblib.Db.Begin()
@@ -669,12 +676,11 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		} else {
 			//	ユーザの獲得ポイント履歴がない。新しく作ります。
 
-			_, ok  := umap_eu[id]
+			_, ok := umap_eu[id]
 			if !ok && point == 0 {
 				//	履歴にないルームのpointが0のときはpointを保存しない
 				continue
 			}
-			srdblib.UpinsEventuser(client, rank, point, gschedule.Eventid, gschedule.Starttime, id, timestamp)
 
 			//	log.Printf("%s new data idx=%d, user_id=%6d point=%d\n", eventid, idx, id, point)
 			log.Printf("%s id=%6d %s *New*%8d\n", eventid, id, timestamp.Format("15:04:05"), point)
@@ -709,11 +715,32 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		p, _ := scoremap.Load(id)
 		ls := p.(*LastScore)
 		InsertIntoPoints(tx, timestamp, id, point, rank, gap, eventid, pstatus, ptime, p.(*LastScore).Qstatus, ls.Qtime)
+		if _, ok := umap_eu[id]; !ok {
+			nu = append(nu, newuser{userno: id, rank: rank, point: point})
+		}
 
 	}
 
 	tx.Commit()
 
+	for _, v := range nu {
+		id := v.userno
+		point := v.point
+		rank := v.rank
+		itfc, err := srdblib.Dbmap.Get(srdblib.Eventuser{}, eventid, id)
+		if err != nil {
+			log.Printf("%s id=%6d Dbmap.Get(Eventuser{},...) err=[%v]\n", eventid, id, err)
+			continue
+		}
+		if itfc == nil {
+			err := srdblib.UpinsEventuser(client, rank, point, eventid, gschedule.Starttime, id, timestamp)
+			if err != nil {
+				log.Printf("%s id=%6d UpinsEventuser() err=[%v]\n", eventid, id, err)
+			} else {
+				log.Printf("%s id=%6d UpinsEventuser() ok\n", eventid, id)
+			}
+		}
+	}
 	//	SaveScoremap()
 
 	//	if runtime.GOOS == "windows" {
