@@ -733,7 +733,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			continue
 		}
 		if itfc == nil {
-			err := srdblib.UpinsEventuser(client, rank, point, eventid, gschedule.Starttime, id, timestamp)
+			err := srdblib.UpinsEventuser(client, rank, point, eventid, gschedule.Starttime, gschedule.Cmap, id, timestamp)
 			if err != nil {
 				log.Printf("%s id=%6d UpinsEventuser() err=[%v]\n", eventid, id, err)
 			} else {

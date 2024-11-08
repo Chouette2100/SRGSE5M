@@ -151,13 +151,14 @@ import (
 	Ver. 021AN01	eventuserにすでに登録されてルームはポイントデータ取得対象とする、cntrblistをidlistの同様に拡張する。
 	Ver. 021AN02	GetPointsAll()のログ出力をeventid id=userno ..... の形に変更する。
 	Ver. 021AN05	GetPointsAll()でUpinsEventuser()はInsertIntoPoints()の直後に行う
+	Ver. 021AN06	ScanActive()でのcmapはGetSchedule()で取得する、wevenuserの使用はeventuserを使うようにする。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AN05"
+const version = "021AN06"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -194,16 +195,17 @@ type LastScore struct {
 }
 
 type Gschedule struct {
-	Eventid  string
-	Ieventid int
-	Starttime  time.Time
-	Endtime  time.Time
+	Eventid   string
+	Ieventid  int
+	Starttime time.Time
+	Endtime   time.Time
 	//	Eventno     int
 	Intervalmin int
 	Modmin      int
 	Modsec      int
 	Fromorder   int
 	Toorder     int
+	Cmap        int
 	Beforestart bool
 	Method      string
 	Done        bool
@@ -662,7 +664,6 @@ func SaveScoremap() (status int) {
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
-
 	status = 0
 
 	file, err := os.OpenFile("scoremap.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
@@ -1068,7 +1069,6 @@ func CopyScore(gschedule Gschedule) (status int) {
 	return
 }
 
-
 /*
 func GetEventInfo() {
 
@@ -1142,7 +1142,7 @@ func main() {
 	//	srdblib.Dbmap.AddTableWithName(srdblib.Wuser{}, "wuser").SetKeys(false, "Userno")
 	//	srdblib.Dbmap.AddTableWithName(srdblib.Userhistory{}, "wuserhistory").SetKeys(false, "Userno", "Ts")
 	//	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "wevent").SetKeys(false, "Eventid")
-	srdblib.Dbmap.AddTableWithName(srdblib.Eventuser{}, "weventuser").SetKeys(false, "Eventid", "Userno")
+	srdblib.Dbmap.AddTableWithName(srdblib.Eventuser{}, "eventuser").SetKeys(false, "Eventid", "Userno")
 	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "event").SetKeys(false, "Eventid")
 
 	//      cookiejarがセットされたHTTPクライアントを作る
@@ -1243,8 +1243,8 @@ func main() {
 		//	毎分00秒になるまで待つ
 		_, tmm, tss := time.Now().Clock()
 		w := 60 - tss
-		if tmm == mm  {
-			if w > 30 && tmm % 5 == 0 {
+		if tmm == mm {
+			if w > 30 && tmm%5 == 0 {
 				time.Sleep(5 * time.Second)
 				SaveScoremap()
 			}
