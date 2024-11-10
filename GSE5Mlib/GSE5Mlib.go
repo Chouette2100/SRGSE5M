@@ -658,19 +658,19 @@ func GetIsOnliveByAPI(client *http.Client, room_id string) (
 
 	user, err := srdblib.Dbmap.Get(&srdblib.User{}, func(a string) int {i, _ := strconv.Atoi(a); return i}(room_id))
 	if user == nil {
-		log.Printf("GetIsOnliveByAPI() user == nil\n")
+		log.Printf("GetIsOnliveByAPI() userno=%s user == nil\n", room_id)
 		status = -1
-		return
 	}
 	if err != nil {
-		log.Printf("GetIsOnliveByAPI() err=%s\n", err.Error())
-		status = -2
-		return
+		log.Printf("GetIsOnliveByAPI() userno=%s  err=%s\n", room_id, err.Error())
+		status += -2
 	}
 	roomstatus, err := srapi.ApiRoomStatus(client, user.(*srdblib.User).Userid)
 	if err != nil {
-		log.Printf("GetIsOnliveByAPI() err=%s\n", err.Error())
-		status = -3
+		log.Printf("GetIsOnliveByAPI() userno=%s  err=%s\n", room_id, err.Error())
+		status += -4
+	}
+	if status < 0 {
 		return
 	}
 

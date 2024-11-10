@@ -31,7 +31,7 @@ import (
 	//	"github.com/360EntSecGroup-Skylar/excelize"
 
 	//	. "MyModule/ShowroomCGIlib"
-	//	"SRGSE5M/GSE5Mlib"
+	"SRGSE5M/GSE5Mlib"
 	//	"SRGSE5M/SRDBlib"
 
 	"github.com/dustin/go-humanize"
@@ -442,6 +442,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				}
 
 			}
+			/*   =============================================
 			//	isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, idList[i])
 			//	if status != 0 {
 			//		log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
@@ -449,6 +450,14 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			isonlive = false
 			startedat = time.Now()
 			//	}
+			/* ==================================================== */
+			if cntrblist[i] == "Y" {
+				isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, idList[i])
+				if status != 0 {
+					log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
+				}
+			}
+			/* ==================================================== */
 			if p, ok := scoremap.Load(id); ok {
 				if isonlive {
 					p.(*LastScore).NoOffline = 0
