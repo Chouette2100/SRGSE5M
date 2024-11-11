@@ -153,13 +153,14 @@ import (
 	Ver. 021AN05	GetPointsAll()でUpinsEventuser()はInsertIntoPoints()の直後に行う
 	Ver. 021AN06	ScanActive()でのcmapはGetSchedule()で取得する、wevenuserの使用はeventuserを使うようにする。
 	Ver. 021AP01	IsOnLiveのチェック処理を復活する。
+	Ver. 021AP04	イベントの参加を取り消した場合の判断はトランザクションの内部で行う。バグがかなりあった。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AP01"
+const version = "021AP04"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -188,11 +189,11 @@ type LastScore struct {
 	Tend    time.Time
 	//	Sum1    int
 	Tstart1   time.Time
-	Continued int
+	Continued int	// 更新（＝（1時間おきに）配信を再スタート）したときの再スタートの回数
 	//	Tend1   time.Time
 	Qstatus   string
 	Qtime     string
-	NoOffline int
+	NoOffline int	// isonlive でない状態が何回続いたか？
 }
 
 type Gschedule struct {
