@@ -154,13 +154,16 @@ import (
 	Ver. 021AN06	ScanActive()でのcmapはGetSchedule()で取得する、wevenuserの使用はeventuserを使うようにする。
 	Ver. 021AP01	IsOnLiveのチェック処理を復活する。
 	Ver. 021AP04	イベントの参加を取り消した場合の判断はトランザクションの内部で行う。バグがかなりあった。
+	Ver. 021AQ01	開催前のイベントは処理の対象としないものとする
+	Ver. 021AR00	GetPointsAll()の二分割を準備する
+	Ver. 021AR05	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AP04"
+const version = "021AR05"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

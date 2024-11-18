@@ -62,8 +62,9 @@ func GetSchedule() (
 
 	tnow := time.Now()
 
-	//	まだ終了日が来ていないイベントを探す
-	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus, fromorder, toorder, cmap from event where endtime > ? "
+	//	開催中のイベントを取得する
+	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus, fromorder, toorder, cmap from event "
+	sqlstmt += " where starttime < ? and endtime > ? "
 	stmt, Err := srdblib.Db.Prepare(sqlstmt)
 	if Err != nil {
 		log.Printf("GetSchedule() Prepare() err=%s\n", Err.Error())
@@ -72,8 +73,8 @@ func GetSchedule() (
 	}
 	defer stmt.Close()
 
-	//	現在時から48時間マイナスしてあるのは、翌日発表の確定値を取得する必要あるイベントも含めるため
-	rows, Err = stmt.Query(tnow.Add(-48 * time.Hour))
+	//	endtimeの比較対象を現在時から48時間マイナスしてあるのは、翌日発表の確定値を取得する必要あるイベントも含めるため
+	rows, Err = stmt.Query(tnow, tnow.Add(-48 * time.Hour))
 	if Err != nil {
 		log.Printf("GetSchedule() Query() (6) err=%s\n", Err.Error())
 		status = -6
