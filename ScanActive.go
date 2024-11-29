@@ -130,7 +130,10 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		}
 	}
 
-	thpoint := 1	//	この値以上の獲得ポイントデータを記録する
+	hh := time.Since(gschedule.Starttime).Hours()
+	thpoint :=  gschedule.Thdelta * ( int(hh) ) + gschedule.Thinit
+	log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
+	log.Printf("%s hh=%d thpoint=%d\n", eventid, int(hh), thpoint)
 
 	//	指定した順位の範囲のルームがidListに存在するかチェックするためidListのmapを作っておく
 	//		idListはこの時点でeventuserに存在するルームのuserno（をstringで表現したもの）
@@ -155,14 +158,14 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	lpr := len(pranking.Ranking)
 
 	log.Printf("%s GetEventsRankingByApi() =%d\n", eventid, lpr)
-	if lpr > 0 &&  lpr < gschedule.Toorder - 5 {
-		thpoint =  0
-	} else if lpr > gschedule.Toorder - 6 {
-			 hh := time.Since(gschedule.Starttime).Hours()
-			 thpoint =  400 * ( int(hh) + 4)
-			 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
-			 log.Printf("%s lpr=%d hh=%d thpoint=%d\n", eventid, lpr, int(hh), thpoint)
-	}
+	//	if lpr > 0 &&  lpr < gschedule.Toorder - 5 {
+	//		thpoint =  0
+	//	} else if lpr > gschedule.Toorder - 6 {
+	//			 hh := time.Since(gschedule.Starttime).Hours()
+	//			 thpoint =  400 * ( int(hh) + 4)
+	//			 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
+	//			 log.Printf("%s lpr=%d hh=%d thpoint=%d\n", eventid, lpr, int(hh), thpoint)
+	//	}
 
 	//	noranking := false
 	if len(pranking.Ranking) == 0 {
@@ -181,14 +184,14 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			log.Printf("%s srapi.GetRoominfFromEventByApi() err=[%s]\n", eventid, err.Error())
 		}
 		
-		lrr := len(roomlistinf.RoomList)
-		log.Printf("%s srapi.GetRoominfFromEventByApi() =%d\n", eventid, lrr)
-		if lrr >  gschedule.Toorder -6 {
-			 hh := time.Since(gschedule.Starttime).Hours()
-			 thpoint =  400 * ( int(hh) + 4)
-			 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
-			 log.Printf("%s lrr=%d hh=%d thpoint=%d\n", eventid, lrr, int(hh), thpoint)
-		}
+		//	lrr := len(roomlistinf.RoomList)
+		//	log.Printf("%s srapi.GetRoominfFromEventByApi() =%d\n", eventid, lrr)
+		//	if lrr >  gschedule.Toorder -6 {
+		//		 hh := time.Since(gschedule.Starttime).Hours()
+		//		 thpoint =  400 * ( int(hh) + 4)
+		//		 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
+		//		 log.Printf("%s lrr=%d hh=%d thpoint=%d\n", eventid, lrr, int(hh), thpoint)
+		//	}
 
 		for _, room := range roomlistinf.RoomList {
 			//	if room.Rank < 2 {
@@ -285,6 +288,10 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			point, rank, gap, _, teventid, _, _, err := srapi.GetPointByApi(client, userno)
 			if err != nil {
 				log.Printf("%s id=%6d GetPointByApi() err=[%s]\n", eventid, userno, err.Error())
+				continue
+			}
+			if teventid == "" {
+				log.Printf("%s id=%6d GetPointByApi() not found in event.", eventid, userno)
 				continue
 			}
 			/* =====================================
@@ -726,7 +733,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 
 			_, ok := umap_eu[uno]
 			if !ok && point < thpoint {
-				//	履歴にないルームのpointが0のときはpointを保存しない
+				//	eventuserにないルームのpointが0のときはpointを保存しない
 				continue
 			}
 

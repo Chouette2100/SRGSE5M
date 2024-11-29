@@ -63,7 +63,7 @@ func GetSchedule() (
 	tnow := time.Now()
 
 	//	開催中のイベントを取得する
-	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus, fromorder, toorder, cmap from event "
+	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus, fromorder, toorder, cmap, thinit, thdelta from event "
 	sqlstmt += " where starttime < ? and endtime > ? "
 	stmt, Err := srdblib.Db.Prepare(sqlstmt)
 	if Err != nil {
@@ -88,10 +88,11 @@ func GetSchedule() (
 	var ieventid int
 	var fromorder, toorder int
 	var cmap int
+	var thinit, thdelta int
 
 	i := 0
 	for rows.Next() {
-		Err = rows.Scan(&eventid, &ieventid, &starttime, &endtime, &rstatus, &fromorder, &toorder, &cmap)
+		Err = rows.Scan(&eventid, &ieventid, &starttime, &endtime, &rstatus, &fromorder, &toorder, &cmap, &thinit, &thdelta)
 
 		if Err != nil {
 			log.Printf("GetSchedule() Scan() err=%s\n", Err.Error())
@@ -139,6 +140,8 @@ func GetSchedule() (
 		gschedule.Fromorder = fromorder
 		gschedule.Toorder = toorder
 		gschedule.Cmap = cmap
+		gschedule.Thinit = thinit
+		gschedule.Thdelta = thdelta
 		gschedulelist = append(gschedulelist, gschedule)
 
 		i++

@@ -157,16 +157,21 @@ import (
 	Ver. 021AQ01	開催前のイベントは処理の対象としないものとする
 	Ver. 021AR00	GetPointsAll()の二分割を準備する
 	Ver. 021AR05	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する。
+	Ver. 021AR06	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する(パラメータはファイルに格納する)
+	Ver. 021AR07	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する(パラメータはeventテーブルに格納する)
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AR05"
+const version = "021AR07"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
+
+
+//	var Thmap map[string][2]int
 
 /*
 type Parameters struct {
@@ -192,11 +197,11 @@ type LastScore struct {
 	Tend    time.Time
 	//	Sum1    int
 	Tstart1   time.Time
-	Continued int	// 更新（＝（1時間おきに）配信を再スタート）したときの再スタートの回数
+	Continued int // 更新（＝（1時間おきに）配信を再スタート）したときの再スタートの回数
 	//	Tend1   time.Time
 	Qstatus   string
 	Qtime     string
-	NoOffline int	// isonlive でない状態が何回続いたか？
+	NoOffline int // isonlive でない状態が何回続いたか？
 }
 
 type Gschedule struct {
@@ -211,6 +216,8 @@ type Gschedule struct {
 	Fromorder   int
 	Toorder     int
 	Cmap        int
+	Thinit	int
+	Thdelta int
 	Beforestart bool
 	Method      string
 	Done        bool
@@ -1161,6 +1168,7 @@ func main() {
 
 	// デーモンをrestartしたときデータの継続性を確保するためのデータを読み込む
 	RestoreScoremap()
+	//	Thmap = ReadThpoint()
 
 	var gschedulelist Gschedulelist
 
@@ -1252,6 +1260,7 @@ func main() {
 			if w > 30 && tmm%5 == 0 {
 				time.Sleep(5 * time.Second)
 				SaveScoremap()
+				//	Thmap = ReadThpoint()
 			}
 			time.Sleep(time.Duration(w) * time.Second)
 		}
@@ -1271,3 +1280,29 @@ func main() {
 	}
 	//	log.Printf(" end time=%s\n", t.Format("2006-01-02 15:04:05"))
 }
+/*
+func ReadThpoint() (thmap map[string][2]int) {
+
+	thmap = make(map[string][2]int)
+
+	file, err := os.Open("thpoint.txt")
+	if err != nil {
+		log.Printf("ReadThpoint() err=%s\n", err.Error())
+		return
+	}
+	defer file.Close()
+
+	var val [2]int
+	var eventid string
+	for {
+		n, err := fmt.Fscanf(file, "%s%d%d\n", &eventid, &val[0], &val[1])
+		if n != 3 || err != nil {
+			log.Printf("ReadTpoint() n=%d err=%s\n", n, err.Error())
+			break
+		}
+		thmap[eventid] = val
+	}
+	log.Printf("thmap=%+v\n", thmap)
+	return
+}
+*/
