@@ -159,13 +159,17 @@ import (
 	Ver. 021AR05	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する。
 	Ver. 021AR06	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する(パラメータはファイルに格納する)
 	Ver. 021AR07	獲得ポイントデータを記録する閾値を設定し、記録するルーム数を制御する(パラメータはeventテーブルに格納する)
+	Ver. 021AR08	GetSchedule()でtoorder が　0　のイベントは処理の対象から除く（toorderが0のデータはSRGCEでテスト用に作ることがある）
+	Ver. 021AS00	scoremapのキーを"userno"から"userno eventid"に変更する。これにより、イベント終了時のGetPointsAll()での重複データの削除を行う。
+	Ver. 021AS01	ScanActive()でMakeComment()の呼び出しをやめる（直接的にはstormapの扱いが誤っているがMakeComment()は必要性がないから）
+	
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AR07"
+const version = "021AS01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -669,130 +673,6 @@ func InsertIntoTimeTable(
 	return
 }
 
-func SaveScoremap() (status int) {
-
-	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
-	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
-	defer exsrapi.PrintExf(cmt0, fncname)()
-
-	status = 0
-
-	file, err := os.OpenFile("scoremap.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
-	if err != nil {
-		fmt.Println(" Can't open file. [", "scoremap.txt", "]")
-		status = 1
-		return
-	}
-
-	//	fmt.Fprintf(file, "%d\n", -1)
-	fmt.Fprintf(file, "%d\n", -2)
-	//	for id, lastscore := range scoremap {
-	scoremap.Range(func(id, value interface{}) bool {
-		fmt.Println("key:", id, " value:", value)
-		ls := value.(*LastScore)
-		fmt.Fprintf(file, "%d\n", id)
-		fmt.Fprintf(file, "%s\n", ls.Eventid)
-		fmt.Fprintf(file, "%d %d %d %d\n", ls.Score, ls.Rank, ls.Dup, ls.Sum0)
-		fmt.Fprintf(file, "%q\n", ls.ts.Format("2006/01/02 15:04:05 MST"))
-		fmt.Fprintf(file, "%q\n", ls.Tstart0.Format("2006/01/02 15:04:05 MST"))
-		fmt.Fprintf(file, "%q\n", ls.Tstart1.Format("2006/01/02 15:04:05 MST"))
-		fmt.Fprintf(file, "%d\n", ls.Continued)
-		fmt.Fprintf(file, "%q\n", ls.Qstatus)
-		fmt.Fprintf(file, "%q\n", ls.Qtime)
-
-		fmt.Fprintf(file, "%d\n", ls.NoOffline)
-
-		//	file.Write([]byte(lastscore))
-		//	err = binary.Write(file, binary.LittleEndian, lastscore)
-		//	fmt.Printf("%v\n%#v\n", err, lastscore)
-
-		return true
-
-	})
-	//	}
-
-	file.Close()
-
-	return
-}
-
-// デーモンをrestartしたときデータの継続性を確保するためのデータを読み込む
-func RestoreScoremap() (status int) {
-
-	status = 0
-
-	file, err := os.OpenFile("scoremap.txt", os.O_RDONLY, 0644)
-	if err != nil {
-		fmt.Println(" Can't open file. [", "scoremap.txt", "]")
-		status = 1
-		return
-	}
-
-	fver := 0
-
-	id := 0
-	ts := ""
-	tstart0 := ""
-	tstart1 := ""
-	eventid := ""
-	for {
-		var lastscore LastScore
-
-		_, err = fmt.Fscanf(file, "%d\n", &id)
-		if err != nil {
-			break
-		}
-
-		if id < 0 {
-			fver = -id
-			fmt.Fscanf(file, "%d\n", &id)
-		}
-
-		fmt.Fscanf(file, "%s\n", &eventid)
-		log.Printf("RestoreScoremap() eventid=%s, id=%d\n", eventid, id)
-
-		if _, ok := eventmap[eventid]; !ok {
-			eventinf, _ := GSE5Mlib.SelectEventInf(eventid)
-			eventmap[eventid] = &eventinf
-		}
-
-		lastscore.Eventid = eventid
-		fmt.Fscanf(file, "%d %d %d %d\n", &lastscore.Score, &lastscore.Rank, &lastscore.Dup, &lastscore.Sum0)
-		fmt.Fscanf(file, "%q\n", &ts)
-		lastscore.ts, _ = time.Parse("2006/01/02 15:04:05 MST", ts)
-		fmt.Fscanf(file, "%q\n", &tstart0)
-		lastscore.Tstart0, _ = time.Parse("2006/01/02 15:04:05 MST", tstart0)
-		if fver > 0 {
-			fmt.Fscanf(file, "%q\n", &tstart1)
-			lastscore.Tstart1, _ = time.Parse("2006/01/02 15:04:05 MST", tstart1)
-			fmt.Fscanf(file, "%d\n", &lastscore.Continued)
-		} else {
-			lastscore.Tstart1 = lastscore.Tstart0
-			lastscore.Continued = 0
-		}
-		fmt.Fscanf(file, "%q\n", &lastscore.Qstatus)
-		fmt.Fscanf(file, "%q\n", &lastscore.Qtime)
-		log.Printf("%v\n%#v %v\n", err, lastscore, lastscore.ts)
-
-		if fver > 1 {
-			fmt.Fscanf(file, "%d\n", &lastscore.NoOffline)
-			log.Printf("%d\n", lastscore.NoOffline)
-		}
-
-		if (*eventmap[eventid]).End_time.Before(time.Now()) {
-			log.Printf("ignored eventid=%s, id=%d\n", eventid, id)
-			continue
-		}
-
-		scoremap.Store(id, &lastscore)
-
-	}
-
-	file.Close()
-
-	return
-}
 
 func MakeComment() (status int) {
 

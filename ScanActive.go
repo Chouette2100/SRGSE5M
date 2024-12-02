@@ -399,11 +399,12 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				dup := -9
 				//	if _, ok := scoremap[uno]; ok {
 				//		dup = scoremap[uno].Dup
-				if _, ok := scoremap.Load(uno); ok {
-					ls, _ := scoremap.Load(uno)
+				unoeid := fmt.Sprintf("%d#%s", uno, eventid)
+				if _, ok := scoremap.Load(unoeid); ok {
+					ls, _ := scoremap.Load(unoeid)
 					dup = ls.(*LastScore).Dup
 				}
-				log.Printf("%s timestamp=%v gschedule.Endtime=%v scoremap[uno].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
+				log.Printf("%s timestamp=%v gschedule.Endtime=%v scoremap[unoeid].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
 				if timestamp.After(gschedule.Endtime.Add(1 * time.Minute )) {
 					//	イベントが終了している。
 					//	if scoremap[id].Dup == 0 {	// 該当scoremap[id]が存在しない場合異常終了する。
@@ -414,7 +415,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 							//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
 							//	InsertIntoTimeTable(gschedule.Eventid, id, timestamp.Add(15*time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
 							//	scoremap[id].Dup = -1
-							ls, _ := scoremap.Load(uno)
+							ls, _ := scoremap.Load(unoeid)
 							InsertIntoTimeTable(
 								gschedule.Eventid, uno,
 								timestamp.Add(15*time.Minute),
@@ -427,7 +428,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 						//	makePQ()
 						log.Printf("%s id=%6d !isonlive\n", eventid, uno)
 						//	if _, ok := scoremap[id]; !ok {
-						if _, ok := scoremap.Load(uno); !ok {
+						if _, ok := scoremap.Load(unoeid); !ok {
 							log.Printf("%s id=%6d scoremap not found.\n", eventid, uno)
 							return
 						}
@@ -438,7 +439,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 						//	stend := (*scoremap[id]).Tend.Format("15:04")
 						//	ststart0 := (*scoremap[id]).Tstart0.Format("01/02 15:04")
 						//	stend := (*scoremap[id]).Tend.Format("15:04")
-						sc, _ := scoremap.Load(uno)
+						sc, _ := scoremap.Load(unoeid)
 						ls := sc.(*LastScore)
 						ststart0 := ls.Tstart0.Format("01/02 15:04")
 						stend := ls.Tend.Format("15:04")
@@ -494,21 +495,23 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				}
 			}
 			/* ==================================================== */
-			if p, ok := scoremap.Load(uno); ok {
+			unoeid := strconv.Itoa(uno) + "#" + eventid
+			if p, ok := scoremap.Load(unoeid); ok {
 				if isonlive {
 					p.(*LastScore).NoOffline = 0
 				} else {
 					p.(*LastScore).NoOffline++
 				}
 			} else {
-				log.Printf("%s scoremap[%d] not found.\n", eventid, uno)
+				log.Printf("%s scoremap[%s] not found.\n", eventid, unoeid)
 			}
 		}
 
 		//	id, _ := strconv.Atoi(idList[i])
 		pstatus := "n/a"
 		ptime := ""
-		if p, ok := scoremap.Load(uno); ok && p.(*LastScore).Eventid == gschedule.Eventid {
+		unoeid := strconv.Itoa(uno) + "#" + eventid
+		if p, ok := scoremap.Load(unoeid); ok && p.(*LastScore).Eventid == gschedule.Eventid {
 			/*
 			if p.(*LastScore).Eventid != gschedule.Eventid {
 				//	scoremap[]にあるイベントが取得対象のイベントと違う ＝  取得対象イベントでの初めてのデータ取得
@@ -559,8 +562,9 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 						//	makePQ = func() {
 
 						log.Printf("%s id=%6d !isonlive\n", eventid, uno)
-						if _, ok := scoremap.Load(uno); !ok {
-							log.Printf("%s scoremap[%d] not found.\n", eventid, uno)
+						unoeid := strconv.Itoa(uno) + "#" + eventid
+						if _, ok := scoremap.Load(unoeid); !ok {
+							log.Printf("%s scoremap[%s] not found.\n", eventid, unoeid)
 							//	return
 							continue
 						}
@@ -760,14 +764,15 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				pstatus = "="
 			}
 
-			scoremap.Store(uno, &score)
+			unoeid := strconv.Itoa(uno) + "#" + eventid
+			scoremap.Store(unoeid, &score)
 
 			//	ptime = ""
 			//	log.Printf("%s scoremap[%d]=%v\n", eventid, uno, scoremap[uno])
 		}
 
 		log.Printf("%s id=%6d point=%d rank=%d\n", eventid, uno, point, rank)
-		p, _ := scoremap.Load(uno)
+		p, _ := scoremap.Load(unoeid)
 		ls := p.(*LastScore)
 		InsertIntoPoints(tx, timestamp, uno, point, rank, gap, eventid, pstatus, ptime, p.(*LastScore).Qstatus, ls.Qtime)
 		if _, ok := umap_eu[uno]; !ok {
@@ -799,7 +804,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	//	SaveScoremap()
 
 	//	if runtime.GOOS == "windows" {
-	MakeComment()
+	//	MakeComment()
 	//	}
 
 	return

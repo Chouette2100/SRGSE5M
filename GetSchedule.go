@@ -64,7 +64,7 @@ func GetSchedule() (
 
 	//	開催中のイベントを取得する
 	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus, fromorder, toorder, cmap, thinit, thdelta from event "
-	sqlstmt += " where starttime < ? and endtime > ? "
+	sqlstmt += " where starttime < ? and endtime > ? and toorder != 0 and achk = 0 "
 	stmt, Err := srdblib.Db.Prepare(sqlstmt)
 	if Err != nil {
 		log.Printf("GetSchedule() Prepare() err=%s\n", Err.Error())
