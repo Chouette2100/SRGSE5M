@@ -162,18 +162,19 @@ import (
 	Ver. 021AR08	GetSchedule()でtoorder が　0　のイベントは処理の対象から除く（toorderが0のデータはSRGCEでテスト用に作ることがある）
 	Ver. 021AS00	scoremapのキーを"userno"から"userno eventid"に変更する。これにより、イベント終了時のGetPointsAll()での重複データの削除を行う。
 	Ver. 021AS01	ScanActive()でMakeComment()の呼び出しをやめる（直接的にはstormapの扱いが誤っているがMakeComment()は必要性がないから）
-	
+	Ver. 021AT00	イベント終了時の処理をデータ作成後最初に行う
+	Ver. 021AT01	GetSchedule()でイベント終了の時刻を終了時刻＋1分にする。
+
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AS01"
+const version = "021AT01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
-
 
 //	var Thmap map[string][2]int
 
@@ -220,8 +221,8 @@ type Gschedule struct {
 	Fromorder   int
 	Toorder     int
 	Cmap        int
-	Thinit	int
-	Thdelta int
+	Thinit      int
+	Thdelta     int
 	Beforestart bool
 	Method      string
 	Done        bool
@@ -673,7 +674,6 @@ func InsertIntoTimeTable(
 	return
 }
 
-
 func MakeComment() (status int) {
 
 	status = 0
@@ -969,6 +969,13 @@ func GetEventInfo() {
 */
 func main() {
 
+	cmt0 := "=========="
+	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	defer exsrapi.PrintExf(cmt0, fncname)()
+
+	debugon := os.Getenv("DEBUG")
+
 	//	eventmap = make(map[string]int)
 	eventmap = make(map[string]*GSE5Mlib.Event_Inf)
 	//	parameters.eventmap = &eventmap
@@ -1109,13 +1116,25 @@ func main() {
 					switch gschedulelist[idx].Method {
 					case "GetScore":
 						//  獲得ポイント取得( GetPointsAll() called )
-						go ScanActive(client, gschedulelist[idx])
+						if debugon == "ON" {
+							ScanActive(client, gschedulelist[idx])
+						} else {
+							go ScanActive(client, gschedulelist[idx])
+						}
 					case "CopyScore":
 						//	最終取得データのコピーを作成する（最終結果格納の準備）
-						go CopyScore(gschedulelist[idx])
+						if debugon == "ON" {
+							CopyScore(gschedulelist[idx])
+						} else {
+							go CopyScore(gschedulelist[idx])
+						}
 					case "GetConfirmed":
 						//  最終結果の取得
-						go GetConfirmed(gschedulelist[idx])
+						if debugon == "ON" {
+							GetConfirmed(gschedulelist[idx])
+						} else {
+							go GetConfirmed(gschedulelist[idx])
+						}
 					}
 					gschedulelist[idx].Done = true
 				} else {
@@ -1160,6 +1179,7 @@ func main() {
 	}
 	//	log.Printf(" end time=%s\n", t.Format("2006-01-02 15:04:05"))
 }
+
 /*
 func ReadThpoint() (thmap map[string][2]int) {
 

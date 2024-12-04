@@ -46,7 +46,6 @@ func SaveScoremap() (err error) {
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
-
 	var file *os.File
 	file, err = os.OpenFile("scoremap.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 	if err != nil {
@@ -58,10 +57,12 @@ func SaveScoremap() (err error) {
 
 	//	fmt.Fprintf(file, "%d\n", -1)
 	//	fmt.Fprintf(file, "%d\n", -2)
-		fmt.Fprintf(file, "%d\n", -3)
+	fmt.Fprintf(file, "%d\n", -3)
 	//	for id, lastscore := range scoremap {
+	no := 0
 	scoremap.Range(func(id, value interface{}) bool {
-		log.Println("key:", id, " value:", value)
+		no++
+		//	log.Println("key:", id, " value:", value)
 		ls := value.(*LastScore)
 		//	fmt.Fprintf(file, "%d\n", id)
 		//	fmt.Fprintf(file, "%s\n", ls.Eventid)
@@ -86,12 +87,18 @@ func SaveScoremap() (err error) {
 	//	}
 
 	//	file.Close()
+	log.Printf("saved=%d\n", no)
 
 	return
 }
 
 // デーモンをrestartしたときデータの継続性を確保するためのデータを読み込む
 func RestoreScoremap() (err error) {
+
+	cmt0 := "=========="
+	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
+	defer exsrapi.PrintExf(cmt0, fncname)()
 
 	var file *os.File
 	file, err = os.OpenFile("scoremap.txt", os.O_RDONLY, 0644)
@@ -121,6 +128,8 @@ func RestoreScoremap() (err error) {
 		fver = -id
 	}
 
+	no := 0
+	noiv := 0
 	for {
 		var lastscore LastScore
 
@@ -158,7 +167,7 @@ func RestoreScoremap() (err error) {
 			return
 		}
 
-		log.Printf("RestoreScoremap() eventid=%s, id=%d\n", eventid, id)
+		//	log.Printf("RestoreScoremap() eventid=%s, id=%d\n", eventid, id)
 
 		if _, ok := eventmap[eventid]; !ok {
 			eventinf, _ := GSE5Mlib.SelectEventInf(eventid)
@@ -185,15 +194,17 @@ func RestoreScoremap() (err error) {
 		}
 		fmt.Fscanf(file, "%q\n", &lastscore.Qstatus)
 		fmt.Fscanf(file, "%q\n", &lastscore.Qtime)
-		log.Printf("%v\n%#v %v\n", err, lastscore, lastscore.ts)
+		//	log.Printf("%v\n%#v %v\n", err, lastscore, lastscore.ts)
 
 		if fver > 1 {
 			fmt.Fscanf(file, "%d\n", &lastscore.NoOffline)
-			log.Printf("%d\n", lastscore.NoOffline)
+			//	log.Printf("%d\n", lastscore.NoOffline)
 		}
 
+		no++
 		if (*eventmap[eventid]).End_time.Before(time.Now()) {
 			log.Printf("ignored eventid=%s, id=%d\n", eventid, id)
+			noiv++
 			continue
 		}
 
@@ -201,6 +212,7 @@ func RestoreScoremap() (err error) {
 		scoremap.Store(key, &lastscore)
 
 	}
+	log.Printf("restored=%d, ignored=%d\n", no-noiv, noiv)
 
 	return
 }

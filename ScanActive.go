@@ -119,7 +119,8 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	eventid := gschedule.Eventid
 
 	timestamp := time.Now().Truncate(time.Second)
-	if timestamp.After(gschedule.Endtime.Add(time.Duration(gschedule.Intervalmin+1) * time.Minute)) {
+	//	if timestamp.After(gschedule.Endtime.Add(time.Duration(gschedule.Intervalmin+1) * time.Minute)) {
+	if timestamp.After(gschedule.Endtime.Add(1 * time.Minute)) {
 		//	イベントが終了した
 		log.Printf("%s set rstatus = DontGetScore.\n", eventid)
 		sqlstmte := "update event set rstatus = ? where eventid = ?"
@@ -131,7 +132,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	}
 
 	hh := time.Since(gschedule.Starttime).Hours()
-	thpoint :=  gschedule.Thdelta * ( int(hh) ) + gschedule.Thinit
+	thpoint := gschedule.Thdelta*(int(hh)) + gschedule.Thinit
 	log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
 	log.Printf("%s hh=%d thpoint=%d\n", eventid, int(hh), thpoint)
 
@@ -183,7 +184,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			err = fmt.Errorf("srapi.GetRoominfFromEventByApi() returned error. %w", err)
 			log.Printf("%s srapi.GetRoominfFromEventByApi() err=[%s]\n", eventid, err.Error())
 		}
-		
+
 		//	lrr := len(roomlistinf.RoomList)
 		//	log.Printf("%s srapi.GetRoominfFromEventByApi() =%d\n", eventid, lrr)
 		//	if lrr >  gschedule.Toorder -6 {
@@ -325,6 +326,51 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 
 	// =============================================================================================================
 
+	//	pstatus := "n/a"
+	//	ptime := ""
+	//	log.Printf("%s %+v\n", eventid, idList)
+
+	//	[]idList: eventuserに存在するルームに取得対象（の候補）となるルームを加えたもののルームIDのリスト
+	//	lenth: len(idList)
+	//	[]plist: 獲得ポイントデータ
+	//	pmap: ルームid/ユーザーNoから獲得ポイント配列（plist）のインデックスを求めるためのmap
+	//	[]qlist: block_id == 0 のブロックデータの（100位までの）ルームのイベント順位
+	//	qmap: ルームID/ユーザーNoから順位配列（qlist）のインデックスを求めるためのmap
+
+	if timestamp.After(gschedule.Endtime.Add(1 * time.Minute)) {
+		//	イベントが終了した
+		log.Printf("%s event ended.\n", eventid)
+		for i, id := range idList {
+			uno, _ := strconv.Atoi(id)
+			eventid := gschedule.Eventid
+			log.Printf("%s event ended.\n", eventid)
+
+			dup := -9
+			unoeid := fmt.Sprintf("%d#%s", uno, eventid)
+			if _, ok := scoremap.Load(unoeid); ok {
+				ls, _ := scoremap.Load(unoeid)
+				dup = ls.(*LastScore).Dup
+			}
+			//	log.Printf("%s timestamp=%v gschedule.Endtime=%v scoremap[unoeid].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
+			//	if scoremap[id].Dup == 0 {	// 該当scoremap[id]が存在しない場合異常終了する。
+			if dup == 0 {
+				//	配信中のイベント終了
+				if cntrblist[i] == "Y" {
+					//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
+					ls, _ := scoremap.Load(unoeid)
+					InsertIntoTimeTable(
+						gschedule.Eventid, uno,
+						timestamp.Add(15*time.Minute),
+						ls.(*LastScore).Sum0,
+						ls.(*LastScore).Tstart0,
+						gschedule.Endtime,
+					)
+				}
+			}
+		}
+		return
+	}
+
 	type newuser struct {
 		userno int
 		rank   int
@@ -340,18 +386,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	}
 	defer tx.Rollback()
 
-	//	pstatus := "n/a"
-	//	ptime := ""
-	//	log.Printf("%s %+v\n", eventid, idList)
-
-	//	[]idList: eventuserに存在するルームに取得対象（の候補）となるルームを加えたもののルームIDのリスト
-	//	lenth: len(idList)
-	//	[]plist: 獲得ポイントデータ
-	//	pmap: ルームid/ユーザーNoから獲得ポイント配列（plist）のインデックスを求めるためのmap
-	//	[]qlist: block_id == 0 のブロックデータの（100位までの）ルームのイベント順位
-	//	qmap: ルームID/ユーザーNoから順位配列（qlist）のインデックスを求めるためのmap
-	//	for i := 0; i < length; i++ {
-	for i, id := range(idList) {
+	for i, id := range idList {
 		//	for i, p := range(plist) {
 
 		//	var makePQ func()
@@ -368,186 +403,81 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		point := 0
 		rank := 0
 		gap := 0
-		if !gschedule.Beforestart {
-			//	開催されているイベント
-			//	uno, _ := strconv.Atoi(idList[i])
-			if idx, ok := pmap[uno]; ok {
-				p := plist[idx]
-				point = p.Point
-				rank = p.Rank
-				gap = p.Gap
-				eventid = p.Eventid
-				if blockid == 0 {
-					//	ブロックIDが0の場合はGetPointByApi()で取得した順位がエントリーしたブロックでの順位であることに注意
-					//	OPTIMIZE: 以下の処理はブロックIDがが0で順位が50位より下のケース、工夫が足りない？
-					if idxq, ok := qmap[uno]; ok {
-						//	log.Printf("%s rank=%d, qrank=%d\n", eventid, rank, (*qlist)[idxq].Rank)
-						rank = (*qlist)[idxq].Rank
-					} else {
-						rank = 9999
-					}
-				}
-			} else {
-				log.Printf("%s id=%6d id not found in pmap\n", eventid, uno)
-				continue
-			}
-			//	if !strings.Contains(eventid, gschedule.Eventid) {
-			if !strings.Contains(gschedule.Eventid, eventid) || timestamp.After(gschedule.Endtime.Add(1 * time.Minute )) {
-				//	イベントがデータ取得対象のイベントではない、あるいはイベントが終了した
-				//	Ver. RU20G4	配信中にイベントが終了したら貢献ポイントを取得する。
-				log.Printf("%s id=%6d isn't gschedule.Eventid(%s)  or event ended.\n", eventid, uno, gschedule.Eventid)
-				dup := -9
-				//	if _, ok := scoremap[uno]; ok {
-				//		dup = scoremap[uno].Dup
-				unoeid := fmt.Sprintf("%d#%s", uno, eventid)
-				if _, ok := scoremap.Load(unoeid); ok {
-					ls, _ := scoremap.Load(unoeid)
-					dup = ls.(*LastScore).Dup
-				}
-				log.Printf("%s timestamp=%v gschedule.Endtime=%v scoremap[unoeid].Dup=%d\n", eventid, timestamp, gschedule.Endtime, dup)
-				if timestamp.After(gschedule.Endtime.Add(1 * time.Minute )) {
-					//	イベントが終了している。
-					//	if scoremap[id].Dup == 0 {	// 該当scoremap[id]が存在しない場合異常終了する。
-					if dup == 0 {
-						//	配信中のイベント終了であるので貢献ランキングを取得する。
-						//	RU20G6 InsertIntoTimeTable(eventid, id, timestamp.Add(15 * time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
-						if cntrblist[i] == "Y" {
-							//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
-							//	InsertIntoTimeTable(gschedule.Eventid, id, timestamp.Add(15*time.Minute), (*scoremap[id]).Sum0, (*scoremap[id]).Tstart0, gschedule.Endtime)
-							//	scoremap[id].Dup = -1
-							ls, _ := scoremap.Load(unoeid)
-							InsertIntoTimeTable(
-								gschedule.Eventid, uno,
-								timestamp.Add(15*time.Minute),
-								ls.(*LastScore).Sum0,
-								ls.(*LastScore).Tstart0,
-								gschedule.Endtime,
-							)
-							ls.(*LastScore).Dup = -1
-						}
-						//	makePQ()
-						log.Printf("%s id=%6d !isonlive\n", eventid, uno)
-						//	if _, ok := scoremap[id]; !ok {
-						if _, ok := scoremap.Load(unoeid); !ok {
-							log.Printf("%s id=%6d scoremap not found.\n", eventid, uno)
-							return
-						}
 
-						//	RU20G1
-						//	(*scoremap[id]).Qtime = (*scoremap[id]).Tstart0.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second).Format("01/02 15:04") + "--" + timestamp.Add(-time.Duration(gschedule.Modmin*60+gschedule.Modsec)*time.Second-delay).Format("15:04")
-						//	ststart0 := (*scoremap[id]).Tstart0.Format("01/02 15:04")
-						//	stend := (*scoremap[id]).Tend.Format("15:04")
-						//	ststart0 := (*scoremap[id]).Tstart0.Format("01/02 15:04")
-						//	stend := (*scoremap[id]).Tend.Format("15:04")
-						sc, _ := scoremap.Load(unoeid)
-						ls := sc.(*LastScore)
-						ststart0 := ls.Tstart0.Format("01/02 15:04")
-						stend := ls.Tend.Format("15:04")
-						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
-						if ststart0 == "01/01 00:00" {
-							ststart0 = ""
-						}
-						if stend == "00:00" {
-							stend = ""
-						}
-						log.Printf("%s ststart0 = [%s] stend = [%s]\n", eventid, ststart0, stend)
-						if ststart0 != "" || stend != "" {
-							ls.Qtime = ststart0 + "--" + stend
-						} else {
-							ls.Qtime = ""
-						}
-						//	RU20G1	-----------------------------
 
-						if ls.Continued > 0 {
-							ls.Qtime += fmt.Sprintf("(C%d)", ls.Continued)
-						} else if ls.Continued == -1 {
-							ls.Qtime += "(E)"
-						} else if ls.Continued < -1 {
-							ls.Qtime += "(U)"
-						}
-
-					}
-
-				}
-				//	Ver. RU20G4	-----------------------------------------------------------------
-				continue
-			} else {
-				if eventid != gschedule.Eventid {
-					//	ブロックイベントの場合 eventid には "?block_id=...."" の部分を含まない
-					eventid = gschedule.Eventid
-					//	rank = 0
-				}
-
-			}
-			/*   =============================================
-			//	isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, idList[i])
-			//	if status != 0 {
-			//		log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
-			//		//	continue
-			isonlive = false
-			startedat = time.Now()
-			//	}
-			/* ==================================================== */
-			if cntrblist[i] == "Y" {
-				isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, id)
-				if status != 0 {
-					log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
-				}
-			}
-			/* ==================================================== */
-			unoeid := strconv.Itoa(uno) + "#" + eventid
-			if p, ok := scoremap.Load(unoeid); ok {
-				if isonlive {
-					p.(*LastScore).NoOffline = 0
+		if idx, ok := pmap[uno]; ok {
+			p := plist[idx]
+			point = p.Point
+			rank = p.Rank
+			gap = p.Gap
+			eventid = p.Eventid
+			if blockid == 0 {
+				//	ブロックIDが0の場合はGetPointByApi()で取得した順位がエントリーしたブロックでの順位であることに注意
+				//	OPTIMIZE: 以下の処理はブロックIDがが0で順位が50位より下のケース、工夫が足りない？
+				if idxq, ok := qmap[uno]; ok {
+					//	ルームがbloc_id=0の100位以内リストにある
+					//	log.Printf("%s rank=%d, qrank=%d\n", eventid, rank, (*qlist)[idxq].Rank)
+					rank = (*qlist)[idxq].Rank
 				} else {
-					p.(*LastScore).NoOffline++
+					//	block_id=0の100位以内リストにルームがない
+					rank = 9999
 				}
-			} else {
-				log.Printf("%s scoremap[%s] not found.\n", eventid, unoeid)
+			}
+		} else {
+			log.Printf("%s id=%6d id not found in pmap\n", eventid, uno)
+			continue
+		}
+		//	if !strings.Contains(eventid, gschedule.Eventid) {
+		if !strings.Contains(gschedule.Eventid, eventid)  {
+			//	イベントがデータ取得対象のイベントではない
+			log.Printf("%s id=%6d isn't gschedule.Eventid(%s)\n", eventid, uno, gschedule.Eventid)
+			continue
+		} else {
+			if eventid != gschedule.Eventid {
+				//	ブロックイベントの場合 eventid には "?block_id=...."" の部分を含まない
+				eventid = gschedule.Eventid
+				//	rank = 0
+			}
+
+		}
+		/*   =============================================
+		//	isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, idList[i])
+		//	if status != 0 {
+		//		log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
+		//		//	continue
+		isonlive = false
+		startedat = time.Now()
+		//	}
+		/* ==================================================== */
+		if cntrblist[i] == "Y" {
+			isonlive, startedat, status = GSE5Mlib.GetIsOnliveByAPI(client, id)
+			if status != 0 {
+				log.Printf("%s GetPointsAll() GetIsOnliveByAPI() err=[%d]\n", eventid, status)
 			}
 		}
+		/* ==================================================== */
+		unoeid := strconv.Itoa(uno) + "#" + eventid
+		if p, ok := scoremap.Load(unoeid); ok {
+			if isonlive {
+				p.(*LastScore).NoOffline = 0
+			} else {
+				p.(*LastScore).NoOffline++
+			}
+		} else {
+			log.Printf("%s scoremap[%s] not found.\n", eventid, unoeid)
+		}
 
-		//	id, _ := strconv.Atoi(idList[i])
 		pstatus := "n/a"
 		ptime := ""
-		unoeid := strconv.Itoa(uno) + "#" + eventid
+		//	unoeid := strconv.Itoa(uno) + "#" + eventid
 		if p, ok := scoremap.Load(unoeid); ok && p.(*LastScore).Eventid == gschedule.Eventid {
-			/*
-			if p.(*LastScore).Eventid != gschedule.Eventid {
-				//	scoremap[]にあるイベントが取得対象のイベントと違う ＝  取得対象イベントでの初めてのデータ取得
-				log.Printf("%s id=%6d %s *Chg*%8d\n", eventid, uno, timestamp.Format("15:04:05"), point)
-				var score LastScore
-				score.Eventid = gschedule.Eventid
-				score.Score = point
-				score.Rank = rank
-				score.ts = timestamp
-				score.Dup = 0
-				score.Qtime = ""
-				score.Qstatus = ""
-
-				if isonlive {
-					score.Tstart0 = startedat
-					score.Tstart1 = startedat
-					score.Tend = startedat.Add(10000 * time.Hour)
-					score.Continued = -999
-					ptime = startedat.Format("01/02 15:04:05")
-					pstatus = "n/a"
-				} else {
-					score.Continued = 0
-					ptime = ""
-					pstatus = "="
-				}
-
-				//	scoremap[id] = &score
-				scoremap.Store(id, &score)
-
-			} else if p.(*LastScore).Score == point && p.(*LastScore).Rank == rank {
-			 */
+			// A 履歴が存在する
 			if p.(*LastScore).Score == point && p.(*LastScore).Rank == rank {
-				//	獲得ポイントも順位も変化がないとき
+				//	A-1 獲得ポイントも順位も変化がないとき
 				//	（順位の変化を獲得ポイントの変化と同一視するのは特定順位を目標とする場合があることを考慮しているため）
 
 				if !isonlive {
+					// A-1-1
 					if p.(*LastScore).Dup == 1 && p.(*LastScore).NoOffline > 1 {
 						//	同一の獲得ポイントが３回、オフラインが２回（以上）連続したとき
 						if p.(*LastScore).Sum0 > 0 {
@@ -645,7 +575,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 					p.(*LastScore).Dup += 1
 					//	(*scoremap[uno]).Sum0 = 0
 				} else {
-					//	配信中
+					//	A-1-2 配信中
 					ptime = p.(*LastScore).Tstart0.Format("01/02 15:04:05")
 					if startedat != p.(*LastScore).Tstart1 {
 						//	配信が始まった
@@ -667,7 +597,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				}
 				p.(*LastScore).ts = timestamp
 			} else {
-				//	獲得ポイントか順位が変化した。
+				//	A-2 獲得ポイントか順位が変化した。
 				pdelta := point - p.(*LastScore).Score
 
 				if pdelta != 0 {
@@ -733,8 +663,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				p.(*LastScore).Dup = 0
 			}
 		} else {
-			//	ユーザの獲得ポイント履歴がない。新しく作ります。
-
+			//	B ユーザの獲得ポイント履歴がない。新しく作ります。
 			_, ok := umap_eu[uno]
 			if !ok && point < thpoint {
 				//	eventuserにないルームのpointが0のときはpointを保存しない
@@ -783,6 +712,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 
 	tx.Commit()
 
+	//	順位と獲得ポイントをeventuserに格納する（eventuserはその時点での最終結果を保存している）
 	for _, v := range nu {
 		id := v.userno
 		point := v.point
@@ -803,9 +733,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	}
 	//	SaveScoremap()
 
-	//	if runtime.GOOS == "windows" {
-	//	MakeComment()
-	//	}
+	//	MakeComment()	MakeComment()はscoremapのキーがeventid+usernoとなったバージョンに対応していないので現時点では使えない。
 
 	return
 }

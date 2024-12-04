@@ -110,7 +110,9 @@ func GetSchedule() (
 		//	log.Printf("tnow= %s end_date=%s (%s)\n", tnow.Format("2006-01-02 15:04:05"), end_date.Format("2006-01-02 15:04:05"), eventid)
 
 		//	rstatusを書き換えて、終了処理をやり直すことができるように条件を設定してある。
-		if tnow.Before(endtime.Add(time.Duration(gschedule.Intervalmin*2+1)*time.Minute)) || rstatus == "" {
+		//	REVIEW: イベント終了時にシステムが動いていないことがあることを考えると時刻の条件は厳しすぎるのでは？
+		//	if tnow.Before(endtime.Add(time.Duration(gschedule.Intervalmin*2+1)*time.Minute)) || rstatus == "" {
+		if rstatus == "" {
 			//	イベント期間中は獲得ポイントデータを取得する。
 			gschedule.Method = "GetScore"
 		} else if tnow.After(endtime.Add(1*time.Minute)) && rstatus != "Provisional" {
