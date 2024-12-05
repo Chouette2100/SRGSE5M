@@ -42,7 +42,7 @@ import (
 func SaveScoremap() (err error) {
 
 	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
@@ -118,7 +118,7 @@ func SaveScoremap() (err error) {
 func RestoreScoremap() (err error) {
 
 	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 

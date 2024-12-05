@@ -49,7 +49,7 @@ func GetSchedule() (
 ) {
 
 	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 	//	fncname := "GetSchedule()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()

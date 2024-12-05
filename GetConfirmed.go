@@ -48,7 +48,7 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	//	var roominf RoomInfo
 
 	//	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 
 	//	fncname := "GetConfirmed()"
 	cmt0 := gschedule.Eventid

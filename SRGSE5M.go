@@ -166,6 +166,7 @@ import (
 	Ver. 021AT01	GetSchedule()でイベント終了の時刻を終了時刻＋1分にする。
 	Ver. 021AT02	通常起こりうる事象に対するエラーメッセージを抑制する。
 	Ver. 021AT03	SaveScoremap()でscoremapとeventmapの不要なデータを削除する。
+	Ver. 021AT04	exsrapi.FuncNameOfThisFunction()の引数の変更に伴う変更を行う
 
 
 	課題
@@ -173,7 +174,7 @@ import (
 
 */
 
-const version = "021AT03"
+const version = "021AT04"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -824,7 +825,7 @@ func CopyScore(gschedule Gschedule) (status int) {
 	var rows *sql.Rows
 
 	//	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 
 	//	fncname := "GetConfirmed()"
 	cmt0 := gschedule.Eventid
@@ -972,7 +973,7 @@ func GetEventInfo() {
 func main() {
 
 	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 

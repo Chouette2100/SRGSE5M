@@ -52,7 +52,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	var rows *sql.Rows
 
 	cmt0 := gschedule.Eventid
-	fncname := exsrapi.FuncNameOfThisFunction() + "()"
+	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
 	//	fncname := "ScanActive()"
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
