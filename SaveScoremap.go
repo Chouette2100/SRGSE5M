@@ -60,22 +60,36 @@ func SaveScoremap() (err error) {
 	fmt.Fprintf(file, "%d\n", -3)
 	//	for id, lastscore := range scoremap {
 	no := 0
+	noiv := 0
 	scoremap.Range(func(id, value interface{}) bool {
-		no++
 		//	log.Println("key:", id, " value:", value)
-		ls := value.(*LastScore)
-		//	fmt.Fprintf(file, "%d\n", id)
-		//	fmt.Fprintf(file, "%s\n", ls.Eventid)
-		fmt.Fprintf(file, "%s\n", id)
-		fmt.Fprintf(file, "%d %d %d %d\n", ls.Score, ls.Rank, ls.Dup, ls.Sum0)
-		fmt.Fprintf(file, "%q\n", ls.ts.Format("2006/01/02 15:04:05 MST"))
-		fmt.Fprintf(file, "%q\n", ls.Tstart0.Format("2006/01/02 15:04:05 MST"))
-		fmt.Fprintf(file, "%q\n", ls.Tstart1.Format("2006/01/02 15:04:05 MST"))
-		fmt.Fprintf(file, "%d\n", ls.Continued)
-		fmt.Fprintf(file, "%q\n", ls.Qstatus)
-		fmt.Fprintf(file, "%q\n", ls.Qtime)
+		ida := strings.Split(id.(string), "#")
+		if _, ok := eventmap[ida[1]]; !ok {
+			eventinf, _ := GSE5Mlib.SelectEventInf(ida[1])
+			eventmap[ida[1]] = &eventinf
+		}
+		if eventmap[ida[1]].End_time.Add(72 * time.Hour).Before(time.Now()) {
+			// 過去のイベント、履歴を保存する必要はない
+			noiv++
+			scoremap.Delete(id)
+			log.Printf("ignored id:%s\n", id)
+		} else {
+			no++
+			// 開催中あるいは終了直後のイベント
+			ls := value.(*LastScore)
+			//	fmt.Fprintf(file, "%d\n", id)
+			//	fmt.Fprintf(file, "%s\n", ls.Eventid)
 
-		fmt.Fprintf(file, "%d\n", ls.NoOffline)
+			fmt.Fprintf(file, "%s\n", id)
+			fmt.Fprintf(file, "%d %d %d %d\n", ls.Score, ls.Rank, ls.Dup, ls.Sum0)
+			fmt.Fprintf(file, "%q\n", ls.ts.Format("2006/01/02 15:04:05 MST"))
+			fmt.Fprintf(file, "%q\n", ls.Tstart0.Format("2006/01/02 15:04:05 MST"))
+			fmt.Fprintf(file, "%q\n", ls.Tstart1.Format("2006/01/02 15:04:05 MST"))
+			fmt.Fprintf(file, "%d\n", ls.Continued)
+			fmt.Fprintf(file, "%q\n", ls.Qstatus)
+			fmt.Fprintf(file, "%q\n", ls.Qtime)
+			fmt.Fprintf(file, "%d\n", ls.NoOffline)
+		}
 
 		//	file.Write([]byte(lastscore))
 		//	err = binary.Write(file, binary.LittleEndian, lastscore)
@@ -86,8 +100,16 @@ func SaveScoremap() (err error) {
 	})
 	//	}
 
+	// イベント一覧から過去のイベントのデータを削除する
+	for k, v := range eventmap {
+		if v.End_time.Add(72 * time.Hour).Before(time.Now()) {
+			log.Printf("eventid=%s is deleted from eventmap.\n", k)
+			delete(eventmap, k)
+		}
+	}	
+
 	//	file.Close()
-	log.Printf("saved=%d\n", no)
+	log.Printf("saved=%d, ignored=%d, len(eventmap)=%d\n", no, noiv, len(eventmap))
 
 	return
 }

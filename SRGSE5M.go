@@ -164,6 +164,8 @@ import (
 	Ver. 021AS01	ScanActive()でMakeComment()の呼び出しをやめる（直接的にはstormapの扱いが誤っているがMakeComment()は必要性がないから）
 	Ver. 021AT00	イベント終了時の処理をデータ作成後最初に行う
 	Ver. 021AT01	GetSchedule()でイベント終了の時刻を終了時刻＋1分にする。
+	Ver. 021AT02	通常起こりうる事象に対するエラーメッセージを抑制する。
+	Ver. 021AT03	SaveScoremap()でscoremapとeventmapの不要なデータを削除する。
 
 
 	課題
@@ -171,7 +173,7 @@ import (
 
 */
 
-const version = "021AT01"
+const version = "021AT03"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

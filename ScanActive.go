@@ -252,7 +252,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		userno := ranking.Room.RoomID
 		if _, ok := umap[userno]; !ok {
 			//	eventuserには存在しないルーム
-			log.Printf("%s id=%6d is not in idList\n", eventid, userno)
+			//	log.Printf("%s id=%6d is not in idList\n", eventid, userno)
 			//	srdblib.UpinsEventuser(client, ranking.Rank, ranking.Point, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
 			idList = append(idList, strconv.Itoa(userno))
 			cntrblist = append(cntrblist, "N")
@@ -283,7 +283,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		if _, ok := pmap[userno]; ok {
 			continue
 		} else {
-			log.Printf("%s id=%6d is not in pranking\n", eventid, userno)
+			//	log.Printf("%s id=%6d is not in pranking\n", eventid, userno)
 			//	eventuserには存在するが上位50位のデータには存在しないルーム
 			//	point, rank, gap, eventid := GSE5Mlib.GetPointsByAPI(userid)
 			point, rank, gap, _, teventid, _, _, err := srapi.GetPointByApi(client, userno)
@@ -463,9 +463,10 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			} else {
 				p.(*LastScore).NoOffline++
 			}
-		} else {
-			log.Printf("%s scoremap[%s] not found.\n", eventid, unoeid)
 		}
+		//	} else {
+		//		log.Printf("%s scoremap[%s] not found.\n", eventid, unoeid)
+		//	}
 
 		pstatus := "n/a"
 		ptime := ""
