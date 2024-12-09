@@ -132,7 +132,11 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	}
 
 	hh := time.Since(gschedule.Starttime).Hours()
-	thpoint := gschedule.Thdelta*(int(hh)) + gschedule.Thinit
+	//	thpoint := gschedule.Thdelta*(int(hh)) + gschedule.Thinit
+	thpoint := gschedule.Thdelta * (int(hh))
+	if thpoint < gschedule.Thinit {
+		thpoint = gschedule.Thinit
+	}
 	log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
 	log.Printf("%s hh=%d thpoint=%d\n", eventid, int(hh), thpoint)
 
@@ -404,7 +408,6 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		rank := 0
 		gap := 0
 
-
 		if idx, ok := pmap[uno]; ok {
 			p := plist[idx]
 			point = p.Point
@@ -428,7 +431,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			continue
 		}
 		//	if !strings.Contains(eventid, gschedule.Eventid) {
-		if !strings.Contains(gschedule.Eventid, eventid)  {
+		if !strings.Contains(gschedule.Eventid, eventid) {
 			//	イベントがデータ取得対象のイベントではない
 			log.Printf("%s id=%6d isn't gschedule.Eventid(%s)\n", eventid, uno, gschedule.Eventid)
 			continue

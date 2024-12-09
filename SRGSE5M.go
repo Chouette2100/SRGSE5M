@@ -167,6 +167,8 @@ import (
 	Ver. 021AT02	通常起こりうる事象に対するエラーメッセージを抑制する。
 	Ver. 021AT03	SaveScoremap()でscoremapとeventmapの不要なデータを削除する。
 	Ver. 021AT04	exsrapi.FuncNameOfThisFunction()の引数の変更に伴う変更を行う
+	---------- V2.0,0 --------------------------------
+	Ver. 021AU00	thpoint = max(thinit, thdelta * hh) とする
 
 
 	課題
@@ -174,7 +176,7 @@ import (
 
 */
 
-const version = "021AT04"
+const version = "021AU00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
