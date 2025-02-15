@@ -1536,9 +1536,10 @@ func GetEventInfAndRoomList(
 
 			ReplaceString := ""
 
-			selection_c := s.Find(".listcardinfo-menu")
+			// selection_c := s.Find(".listcardinfo-menu")
 
-			account, _ := selection_c.Find(".room-url").Attr("href")
+			// account, _ := selection_c.Find(".room-url").Attr("href")
+			account, _ := s.Find(".room-url").Attr("href")
 			if inputmode == "file" {
 				ReplaceString = "https://www.showroom-live.com/"
 			} else {
@@ -1546,7 +1547,8 @@ func GetEventInfAndRoomList(
 			}
 			roominfo.Account = strings.Replace(account, ReplaceString, "", -1)
 
-			roominfo.ID, _ = selection_c.Find(".js-follow-btn").Attr("data-room-id")
+			// roominfo.ID, _ = selection_c.Find(".js-follow-btn").Attr("data-room-id")
+			roominfo.ID, _ = s.Find(".js-follow-btn").Attr("data-room-id")
 			roominfo.Userno, _ = strconv.Atoi(roominfo.ID)
 
 			*roominfolist = append(*roominfolist, roominfo)

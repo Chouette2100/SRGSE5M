@@ -169,6 +169,8 @@ import (
 	Ver. 021AT04	exsrapi.FuncNameOfThisFunction()の引数の変更に伴う変更を行う
 	---------- V2.0,0 --------------------------------
 	Ver. 021AU00	thpoint = max(thinit, thdelta * hh) とする
+	Ver. 021AU01	GetConfirmed()で結果発表後のイベントページのレイアウトが変更されたため、その対応を行う
+					（イベント結果ポイントが取得できなくなっていた）
 
 
 	課題
@@ -176,7 +178,7 @@ import (
 
 */
 
-const version = "021AU00"
+const version = "021AU01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

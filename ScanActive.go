@@ -138,7 +138,8 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		thpoint = gschedule.Thinit
 	}
 	log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
-	log.Printf("%s hh=%d thpoint=%d\n", eventid, int(hh), thpoint)
+	log.Printf("%s hh=%d Thinit=%d Thdelta=%d thpoint=%d\n",
+		eventid, int(hh), gschedule.Thinit, gschedule.Thdelta, thpoint)
 
 	//	指定した順位の範囲のルームがidListに存在するかチェックするためidListのmapを作っておく
 	//		idListはこの時点でeventuserに存在するルームのuserno（をstringで表現したもの）
