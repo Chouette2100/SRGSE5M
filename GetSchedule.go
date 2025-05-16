@@ -37,9 +37,9 @@ import (
 
 	//	"github.com/dustin/go-humanize"
 
-	"github.com/Chouette2100/exsrapi"
-	//	"github.com/Chouette2100/srapi"
-	"github.com/Chouette2100/srdblib"
+	"github.com/Chouette2100/exsrapi/v2"
+	//	"github.com/Chouette2100/srapi/v2"
+	"github.com/Chouette2100/srdblib/v2"
 )
 
 //  現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する

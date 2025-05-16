@@ -59,9 +59,9 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/Chouette2100/exsrapi"
-	"github.com/Chouette2100/srapi"
-	"github.com/Chouette2100/srdblib"
+	"github.com/Chouette2100/exsrapi/v2"
+	"github.com/Chouette2100/srapi/v2"
+	"github.com/Chouette2100/srdblib/v2"
 )
 
 /*
@@ -171,6 +171,8 @@ import (
 	Ver. 021AU00	thpoint = max(thinit, thdelta * hh) とする
 	Ver. 021AU01	GetConfirmed()で結果発表後のイベントページのレイアウトが変更されたため、その対応を行う
 					（イベント結果ポイントが取得できなくなっていた）
+	Ver. 021AV00	イベント終了時のGetConfirmed()はこのプログラム内では行わない。
+	Ver. 021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
 
 
 	課題
@@ -178,7 +180,7 @@ import (
 
 */
 
-const version = "021AU01"
+const version = "021AW00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -1135,13 +1137,14 @@ func main() {
 						} else {
 							go CopyScore(gschedulelist[idx])
 						}
-					case "GetConfirmed":
-						//  最終結果の取得
-						if debugon == "ON" {
-							GetConfirmed(gschedulelist[idx])
-						} else {
-							go GetConfirmed(gschedulelist[idx])
-						}
+					// case "GetConfirmed":
+					// 	//  最終結果の取得
+					// 	if debugon == "ON" {
+					// 		GetConfirmed(gschedulelist[idx])
+					// 	} else {
+					// 		go GetConfirmed(gschedulelist[idx])
+					// 	}
+					default:
 					}
 					gschedulelist[idx].Done = true
 				} else {

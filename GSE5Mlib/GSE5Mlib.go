@@ -34,9 +34,9 @@ import (
 
 	//	"SRGSE5M/SRDBlib"
 
-	"github.com/Chouette2100/srapi"
-	"github.com/Chouette2100/exsrapi"
-	"github.com/Chouette2100/srdblib"
+	"github.com/Chouette2100/exsrapi/v2"
+	"github.com/Chouette2100/srapi/v2"
+	"github.com/Chouette2100/srdblib/v2"
 )
 
 /*
@@ -78,11 +78,12 @@ import (
 	021AD01	GetIsOnliveByAPI()はsrapi.ApiRoomStatus()で実現する(2)
 	021AE00	GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
 	021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
+	021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
 
 
 */
 
-const Version = "021AE02"
+const Version = "021AW00"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -656,7 +657,7 @@ func GetIsOnliveByAPI(client *http.Client, room_id string) (
 
 	status = 0
 
-	user, err := srdblib.Dbmap.Get(&srdblib.User{}, func(a string) int {i, _ := strconv.Atoi(a); return i}(room_id))
+	user, err := srdblib.Dbmap.Get(&srdblib.User{}, func(a string) int { i, _ := strconv.Atoi(a); return i }(room_id))
 	if user == nil {
 		log.Printf("GetIsOnliveByAPI() userno=%s user == nil\n", room_id)
 		status = -1
@@ -678,79 +679,79 @@ func GetIsOnliveByAPI(client *http.Client, room_id string) (
 	startedat = time.Unix(roomstatus.Started_at, 0).Truncate(time.Second)
 
 	/*
-	//	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-	url := "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" + room_id
+		//	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+		url := "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" + room_id
 
-	resp, err := http.Get(url)
-	if err != nil {
-		//	一時的にデー�が取得できない。
-		//	resp.Body.Close()
-		//		panic(err)
-		status = -1
-		return
-	}
-	defer resp.Body.Close()
+		resp, err := http.Get(url)
+		if err != nil {
+			//	一時的にデー�が取得できない。
+			//	resp.Body.Close()
+			//		panic(err)
+			status = -1
+			return
+		}
+		defer resp.Body.Close()
 
-	//	JSONをデコードする。
-	//	次の記事を参考にさせていただいております。
-	//		Go言��でJSONに��かないためのコー�ィングパターン
-	//		XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+		//	JSONをデコードする。
+		//	次の記事を参考にさせていただいております。
+		//		Go言��でJSONに��かないためのコー�ィングパターン
+		//		XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-	var result interface{}
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&result); err != nil {
-		//	panic(err)
-		status = -2
-		return
-	}
+		var result interface{}
+		decoder := json.NewDecoder(resp.Body)
+		if err := decoder.Decode(&result); err != nil {
+			//	panic(err)
+			status = -2
+			return
+		}
 
-	//	配信中か？
-	isonlive, _ = result.(map[string]interface{})["is_onlive"].(bool)
+		//	配信中か？
+		isonlive, _ = result.(map[string]interface{})["is_onlive"].(bool)
 
-	if isonlive {
-		//	配信開始時��の取得
-		value, _ := result.(map[string]interface{})["current_live_started_at"].(float64)
-		startedat = time.Unix(int64(value), 0).Truncate(time.Second)
-		//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
-	}
+		if isonlive {
+			//	配信開始時��の取得
+			value, _ := result.(map[string]interface{})["current_live_started_at"].(float64)
+			startedat = time.Unix(int64(value), 0).Truncate(time.Second)
+			//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
+		}
 	*/
 
 	/*
-	//	https://qiita.com/takeru7584/items/f4ba4c31551204279ed2
-	url := "https://www.showroom-live.com/api/room/profile?room_id=" + room_id
+		//	https://qiita.com/takeru7584/items/f4ba4c31551204279ed2
+		url := "https://www.showroom-live.com/api/room/profile?room_id=" + room_id
 
-	resp, err := http.Get(url)
-	if err != nil {
-		//	一時的にデータが取得できない。
-		//	resp.Body.Close()
-		//		panic(err)
-		status = -1
-		return
-	}
-	defer resp.Body.Close()
+		resp, err := http.Get(url)
+		if err != nil {
+			//	一時的にデータが取得できない。
+			//	resp.Body.Close()
+			//		panic(err)
+			status = -1
+			return
+		}
+		defer resp.Body.Close()
 
-	//	JSONをデコードする。
-	//	次の記事を参考にさせていただいております。
-	//		Go言語でJSONに泣かないためのコーディングパターン
-	//		https://qiita.com/msh5/items/dc524e38073ed8e3831b
+		//	JSONをデコードする。
+		//	次の記事を参考にさせていただいております。
+		//		Go言語でJSONに泣かないためのコーディングパターン
+		//		https://qiita.com/msh5/items/dc524e38073ed8e3831b
 
-	var result interface{}
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&result); err != nil {
-		//	panic(err)
-		status = -2
-		return
-	}
+		var result interface{}
+		decoder := json.NewDecoder(resp.Body)
+		if err := decoder.Decode(&result); err != nil {
+			//	panic(err)
+			status = -2
+			return
+		}
 
-	//	配信中か？
-	isonlive, _ = result.(map[string]interface{})["is_onlive"].(bool)
+		//	配信中か？
+		isonlive, _ = result.(map[string]interface{})["is_onlive"].(bool)
 
-	if isonlive {
-		//	配信開始時刻の取得
-		value, _ := result.(map[string]interface{})["current_live_started_at"].(float64)
-		startedat = time.Unix(int64(value), 0).Truncate(time.Second)
-		//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
-	}
+		if isonlive {
+			//	配信開始時刻の取得
+			value, _ := result.(map[string]interface{})["current_live_started_at"].(float64)
+			startedat = time.Unix(int64(value), 0).Truncate(time.Second)
+			//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
+		}
 	*/
 
 	return
@@ -1102,6 +1103,19 @@ func InsertRoomInf(eventid string, roominfolist *RoomInfoList) {
 }
 */
 
+/*
+func InsertIntoUser[T srdblib.UserT](
+	client *http.Client,
+	tnow time.Time,
+	xuser T, // xuser.Userno が使用される。更新対象がuserであるかtwuserであるかを判定するためにxuserが使用される。
+) (
+	err error,
+) {
+	srdblib.InsertUsertable(client, tnow, xuser)
+	return
+}
+*/
+
 func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string, roominf RoomInfo) (status int) {
 
 	/*
@@ -1136,7 +1150,15 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 
 	if nrow == 0 {
 
-		srdblib.InsertIntoUser(client, tnow, userno)
+		// srdblib.InsertIntoUser(client, tnow, userno)
+		var newuser srdblib.User
+		newuser.Userno = userno
+		_, err = srdblib.InsertUsertable(&http.Client{}, time.Now(), &newuser)
+		if err != nil {
+			log.Printf("InsertIntoOrUpdateUser() error(InsertUsertable) err=%s\n", err.Error())
+			// status = -1
+			// return
+		}
 
 		//	isnew = true
 

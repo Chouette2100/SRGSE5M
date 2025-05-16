@@ -21,7 +21,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/Chouette2100/srdblib"
+	"github.com/Chouette2100/srdblib/v2"
 )
 
 /*
@@ -30,9 +30,10 @@ import (
 01AB00	stmtを使いまわしたとき、2回目の前にstmt.Close()を行う。
 021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 021AA01	VSCaodeで発生したエラーを修正する（処理には影響しない）
+021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
 */
 
-const Version = "021AA01"
+const Version = "021AW00"
 
 type Event_Inf struct {
 	Event_ID    string

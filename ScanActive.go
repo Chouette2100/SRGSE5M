@@ -36,9 +36,9 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/Chouette2100/exsrapi"
-	"github.com/Chouette2100/srapi"
-	"github.com/Chouette2100/srdblib"
+	"github.com/Chouette2100/exsrapi/v2"
+	"github.com/Chouette2100/srapi/v2"
+	"github.com/Chouette2100/srdblib/v2"
 )
 
 /*
@@ -179,41 +179,57 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		//	2. イベント開始前
 		//	3. イベントエントリーなし
 		//	noranking = true
-		roomlistinf, err := srapi.GetRoominfFromEventByApi(
-			client,
-			gschedule.Ieventid, //	Event_id (int) event_url_key ではないことに注意
-			gschedule.Fromorder,
-			gschedule.Toorder,
-		)
-		if err != nil {
-			err = fmt.Errorf("srapi.GetRoominfFromEventByApi() returned error. %w", err)
-			log.Printf("%s srapi.GetRoominfFromEventByApi() err=[%s]\n", eventid, err.Error())
-		}
+		/*
+			roomlistinf, err := srapi.GetRoominfFromEventByApi(
+				client,
+				gschedule.Ieventid, //	Event_id (int) event_url_key ではないことに注意
+				gschedule.Fromorder,
+				gschedule.Toorder,
+			)
+			if err != nil {
+				err = fmt.Errorf("srapi.GetRoominfFromEventByApi() returned error. %w", err)
+				log.Printf("%s srapi.GetRoominfFromEventByApi() err=[%s]\n", eventid, err.Error())
+			}
 
-		//	lrr := len(roomlistinf.RoomList)
-		//	log.Printf("%s srapi.GetRoominfFromEventByApi() =%d\n", eventid, lrr)
-		//	if lrr >  gschedule.Toorder -6 {
-		//		 hh := time.Since(gschedule.Starttime).Hours()
-		//		 thpoint =  400 * ( int(hh) + 4)
-		//		 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
-		//		 log.Printf("%s lrr=%d hh=%d thpoint=%d\n", eventid, lrr, int(hh), thpoint)
-		//	}
-
-		for _, room := range roomlistinf.RoomList {
-			//	if room.Rank < 2 {
-			//		//TODO: 除外の条件が厳しすぎる？
-			//		break
+			//	lrr := len(roomlistinf.RoomList)
+			//	log.Printf("%s srapi.GetRoominfFromEventByApi() =%d\n", eventid, lrr)
+			//	if lrr >  gschedule.Toorder -6 {
+			//		 hh := time.Since(gschedule.Starttime).Hours()
+			//		 thpoint =  400 * ( int(hh) + 4)
+			//		 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
+			//		 log.Printf("%s lrr=%d hh=%d thpoint=%d\n", eventid, lrr, int(hh), thpoint)
 			//	}
-			userno := room.Room_id
+
+			for _, room := range roomlistinf.RoomList {
+				//	if room.Rank < 2 {
+				//		//TODO: 除外の条件が厳しすぎる？
+				//		break
+				//	}
+				userno := room.Room_id
+				if _, ok := umap[userno]; !ok {
+					//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
+					idList = append(idList, strconv.Itoa(userno))
+					cntrblist = append(cntrblist, "N")
+				}
+				//	cntrblist := append(cntrblist, "N")
+				//	//		GetPointsAll(idlist, gschedule, cntrblist)
+				//	GetPointsAll(client, idlist, gschedule, cntrblist)
+				//	time.Sleep(time.Duration(gschedule.Intervalmin+1) * time.Minute)
+			}
+		*/
+		var erl *srapi.EventRanking
+		erl, err = srapi.GetEventRankingByApi(client, gschedule.Eventid, gschedule.Fromorder, gschedule.Toorder)
+		if err != nil {
+			err = fmt.Errorf("srapi.GetEventRankingByApi() returned error. %w", err)
+			log.Printf("%s GetEventRankingByApi() err=[%s]\n", eventid, err.Error())
+		}
+		for _, room := range erl.Ranking {
+			userno := room.RoomID
 			if _, ok := umap[userno]; !ok {
 				//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
 				idList = append(idList, strconv.Itoa(userno))
 				cntrblist = append(cntrblist, "N")
 			}
-			//	cntrblist := append(cntrblist, "N")
-			//	//		GetPointsAll(idlist, gschedule, cntrblist)
-			//	GetPointsAll(client, idlist, gschedule, cntrblist)
-			//	time.Sleep(time.Duration(gschedule.Intervalmin+1) * time.Minute)
 		}
 	}
 
