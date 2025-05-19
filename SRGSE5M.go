@@ -173,6 +173,7 @@ import (
 					（イベント結果ポイントが取得できなくなっていた）
 	Ver. 021AV00	イベント終了時のGetConfirmed()はこのプログラム内では行わない。
 	Ver. 021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
+	Ver. 021AX00	srdblibをv2.3.2に変更する。
 
 
 	課題
@@ -180,7 +181,7 @@ import (
 
 */
 
-const version = "021AW00"
+const version = "021AX00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
