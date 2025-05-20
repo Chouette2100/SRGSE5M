@@ -159,10 +159,12 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
 	if err != nil {
 		log.Printf("%s GetEventsRankingByApi() err=[%s]\n", eventid, err.Error())
-		return -1
+		// 	return -1
 	}
-	lpr := len(pranking.Ranking)
-
+	lpr := 0
+	if err == nil {
+		lpr = len(pranking.Ranking)
+	}
 	log.Printf("%s GetEventsRankingByApi() =%d\n", eventid, lpr)
 	//	if lpr > 0 &&  lpr < gschedule.Toorder - 5 {
 	//		thpoint =  0
@@ -174,7 +176,8 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	//	}
 
 	//	noranking := false
-	if len(pranking.Ranking) == 0 {
+	// if len(pranking.Ranking) == 0 {
+	if lpr == 0 {
 		//	1. レベルイベント（GetEventsRankingByApi()で獲得ポイントを取得できない）
 		//	2. イベント開始前
 		//	3. イベントエントリーなし
@@ -221,15 +224,34 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		erl, err = srapi.GetEventRankingByApi(client, gschedule.Eventid, gschedule.Fromorder, gschedule.Toorder)
 		if err != nil {
 			err = fmt.Errorf("srapi.GetEventRankingByApi() returned error. %w", err)
-			log.Printf("%s GetEventRankingByApi() err=[%s]\n", eventid, err.Error())
+			log.Printf("%s err=[%s]\n", eventid, err.Error())
 		}
-		for _, room := range erl.Ranking {
-			userno := room.RoomID
-			if _, ok := umap[userno]; !ok {
-				//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
-				idList = append(idList, strconv.Itoa(userno))
-				cntrblist = append(cntrblist, "N")
+		if len(erl.Ranking) != 0 {
+			for _, room := range erl.Ranking {
+				userno := room.RoomID
+				if _, ok := umap[userno]; !ok {
+					//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
+					idList = append(idList, strconv.Itoa(userno))
+					cntrblist = append(cntrblist, "N")
+				}
 			}
+		} else {
+			// レベルイベントのときは、GetEventQuestRooms()を使う
+			var eqr *srapi.EventQuestRooms
+			eqr, err = srapi.GetEventQuestRoomsByApi(client, gschedule.Eventid, gschedule.Fromorder, gschedule.Toorder)
+			if err != nil {
+				err = fmt.Errorf("srapi.GetEventQuestRooms() returned error. %w", err)
+				log.Printf("%s err=[%s]\n", eventid, err.Error())
+			}
+			for _, room := range eqr.EventQuestLevelRanges[0].Rooms {
+				userno := room.RoomID
+				if _, ok := umap[userno]; !ok {
+					//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
+					idList = append(idList, strconv.Itoa(userno))
+					cntrblist = append(cntrblist, "N")
+				}
+			}
+
 		}
 	}
 
@@ -262,7 +284,8 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	//		//	prankingが作られていない
 	//	指定した範囲の順位にあるルームのid(userno)を保存する。
 	for i := gschedule.Fromorder - 1; i < gschedule.Toorder; i++ {
-		if i >= len(pranking.Ranking) {
+		// if i >= len(pranking.Ranking) {
+		if i >= lpr {
 			break
 		}
 		ranking := pranking.Ranking[i]
@@ -289,14 +312,16 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		return
 	}
 
-	for i, ranking := range pranking.Ranking {
-		pmap[ranking.Room.RoomID] = i
-		plist = append(plist, srdblib.Points{
-			Eventid: gschedule.Eventid,
-			User_id: ranking.Room.RoomID,
-			Point:   ranking.Point,
-			Rank:    ranking.Rank,
-		})
+	if lpr != 0 {
+		for i, ranking := range pranking.Ranking {
+			pmap[ranking.Room.RoomID] = i
+			plist = append(plist, srdblib.Points{
+				Eventid: gschedule.Eventid,
+				User_id: ranking.Room.RoomID,
+				Point:   ranking.Point,
+				Rank:    ranking.Rank,
+			})
+		}
 	}
 
 	for _, userid := range idList {
