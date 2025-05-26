@@ -242,6 +242,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 			if err != nil {
 				err = fmt.Errorf("srapi.GetEventQuestRooms() returned error. %w", err)
 				log.Printf("%s err=[%s]\n", eventid, err.Error())
+				return
 			}
 			for _, room := range eqr.EventQuestLevelRanges[0].Rooms {
 				userno := room.RoomID

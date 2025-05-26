@@ -176,6 +176,7 @@ import (
 	Ver. 021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
 	Ver. 021AX00	srdblibをv2.3.2に変更する。
 	Ver. 021AY00	レベルイベントのルーム取得にGetEventQuestRoomsByApi()を使用する。
+	Ver. 021AY01	GetEventQuestRoomsByApi()でエラーが発生したときは獲得ポイント取得の処理を打ち切る。
 
 
 	課題
@@ -183,7 +184,7 @@ import (
 
 */
 
-const version = "021AY00"
+const version = "021AY01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
