@@ -48,6 +48,12 @@ import (
 
 func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic:", r)
+		}
+	}()
+
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 

@@ -1,8 +1,6 @@
-/*!
-Copyright © 2022 chouette.21.00@gmail.com
-Released under the MIT license
-https://opensource.org/licenses/mit-license.php
-*/
+// Copyright © 2022-2025 chouette2100@gmail.com
+// Released under the MIT license
+// https://opensource.org/licenses/mit-license.php
 /*
 指定した時刻に指定したイベント、配信者の獲得ポイントを取得します。
 
@@ -29,11 +27,14 @@ package main
 
 import (
 	//	"crypto/aes"
+	"context"
 	"fmt"
 	"log"
 	"os"
-	"strconv"
+	"os/signal"
+	// "strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	//	"strings"
@@ -45,7 +46,7 @@ import (
 
 	//	"net/http"
 
-	"database/sql"
+	// "database/sql"
 
 	_ "github.com/go-sql-driver/mysql"
 
@@ -58,7 +59,7 @@ import (
 	"SRGSE5M/GSE5Mlib"
 	"SRGSE5M/SRDBlib"
 
-	"github.com/dustin/go-humanize"
+	// "github.com/dustin/go-humanize"
 
 	"github.com/Chouette2100/exsrapi/v2"
 	"github.com/Chouette2100/srapi/v2"
@@ -177,14 +178,16 @@ import (
 	Ver. 021AX00	srdblibをv2.3.2に変更する。
 	Ver. 021AY00	レベルイベントのルーム取得にGetEventQuestRoomsByApi()を使用する。
 	Ver. 021AY01	GetEventQuestRoomsByApi()でエラーが発生したときは獲得ポイント取得の処理を打ち切る。
-
+	Ver. 021AY02	ScanActive()にpanicをrecoverする処理を追加する。
+	Ver. 021AZ00	シグナルを捕捉して終了するようにする(グレイスフルシャットダウン)
+	Ver. 021AZ01	シグナルを検出したときのメッセージを実態に合わせる。main.goをmain.goとInsertIntoPoints.goに分離する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AY01"
+const version = "021AZ01"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -262,716 +265,37 @@ var scoremap sync.Map
 //	var db *sql.DB
 //	var err error
 
-/*
-func InsertSampleTimeIntoTimeacqTable() (timestamp time.Time) {
-
-	//	db := *parameters.DB
-
-	/.
-		rows, err := Db.Query("select auto_increment from information_schema.tables where table_name ='timeacq'")
-		if err != nil {
-			panic(err.Error())
-		}
-		defer rows.Close()
-
-		//	var idx int
-		for rows.Next() {
-			err = rows.Scan(&idx)
-			if err != nil {
-				panic(err.Error())
-			}
-		}
-	./
-
-	//	create table timeacq (idx int auto_increment, t datetime,index(idx));
-	/.
-		log.Printf("db.Prepare()\n")
-		stmt, err := db.Prepare("INSERT INTO timeacq(t) VALUES(?)")
-		if err != nil {
-			log.Fatal(err)
-		}
-		//	https://blog.suganoo.net/entry/2019/01/25/190200
-		defer stmt.Close()
-
-		log.Printf("row.Exec()\n")
-		_, err = stmt.Exec(time.Now().Format("2006-01-02 15:04:05"))
-	./
-	//	log.Printf("db.Exec()\n")
-	timestamp = time.Now()
-	stimestamp := timestamp.Format("2006-01-02 15:04:05")
-	_, err := Db.Exec("INSERT INTO timeacq (t) VALUES ('" + stimestamp + "')")
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return
-}
-*/
-
-func InsertIntoPoints(
-	tx *sql.Tx,
-	timestamp time.Time,
-	userno int,
-	point, rank,
-	gap int,
-	eventid string,
-	pstatus string,
-	ptime string,
-	qstatus string,
-	qtime string,
-) (
-	status int,
-) {
-
-	status = 0
-
-	//	log.Printf("InsertIntoPoints()　db.Prepare()\n")
-	var stmt *sql.Stmt
-	stmt, srdblib.Dberr = tx.Prepare("INSERT INTO points(ts, user_id, eventid, point, `rank`, gap, pstatus, ptime, qstatus, qtime) VALUES(?,?,?,?,?,?,?,?,?,?)")
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoPoints() select err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-	defer stmt.Close()
-
-	//	log.Printf("InsertIntoPoints()　row.Exec("InsertIntoOrUpdate",...)\n")
-	//	log.Printf("timestamp=%v, userno=%v, eventid=%v, point=%v, rank=%v, gap=%v, pstatus=%v, ptime=%v, qstatus=%v, qtime=%v\n", timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
-	_, srdblib.Dberr = stmt.Exec(timestamp, userno, eventid, point, rank, gap, pstatus, ptime, qstatus, qtime)
-
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoPoints() insert into points err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-
-	//	===============================================
-	sqlstmt := "update eventuser set point = ? where eventid = ? and userno = ?"
-	_, srdblib.Dberr = tx.Exec(sqlstmt, point, eventid, userno)
-
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoPoints() update eventuser err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-
-	return
+// シャットダウンに関連する状態をまとめた構造体
+type AppShutdownManager struct {
+	Ctx    context.Context
+	Cancel context.CancelFunc // トップレベルでのみ使うことが多いが、構造体に含めることも可能
+	Wg     *sync.WaitGroup
+	// 他のリソース（DB接続など）を含めることも可能
+	// DB *gorp.DbMap // 例
 }
 
-func InsertIntoOrUpdatePoints(
-	timestamp time.Time,
-	roominf GSE5Mlib.RoomInfo,
-	rank int,
-	gap int,
-	eventid string,
-	pstatus string,
-	ptime string,
-	qstatus string,
-	qtime string,
-) (
-	status int,
-) {
-
-	status = 0
-
-	nrow := 0
-	sqlstmt := "select count(*) from points where ts = ? and eventid = ? and user_id= ?"
-	srdblib.Dberr = srdblib.Db.QueryRow(sqlstmt, timestamp, eventid, roominf.Userno).Scan(&nrow)
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-	if nrow == 0 {
-		//	log.Printf("InsertIntoOrUpdatePoints()　db.Prepare()\n")
-		var stmt *sql.Stmt
-		stmt, srdblib.Dberr = srdblib.Db.Prepare("INSERT INTO points(ts, user_id, eventid, point, `rank`, gap, pstatus, ptime, qstatus, qtime) VALUES(?,?,?,?,?,?,?,?,?,?)")
-		if srdblib.Dberr != nil {
-			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-		}
-		defer stmt.Close()
-
-		//	log.Printf("InsertIntoOrUpdatePoints()　row.Exec("InsertIntoOrUpdate",...)\n")
-		_, srdblib.Dberr = stmt.Exec(timestamp, roominf.Userno, eventid, roominf.Point, rank, gap, pstatus, ptime, qstatus, qtime)
-
-		if srdblib.Dberr != nil {
-			log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-		}
-	} else {
-		sqlstmt = "update points set point = ?, `rank`=?, gap=?, pstatus=?, ptime =?, qstatus=?, qtime=? where ts=? and eventid=? and user_id=?"
-		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmt, roominf.Point, rank, gap, pstatus, ptime, qstatus, qtime, timestamp, eventid, roominf.Userno)
-
-		if srdblib.Dberr != nil {
-			log.Printf("InsertIntoOrUpdatePoints() update points err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-		}
-	}
-
-	//	===============================================
-	nrow = 0
-	sqlstmt = "select count(*) from eventuser where eventid = ? and userno = ?"
-	srdblib.Dberr = srdblib.Db.QueryRow(sqlstmt, eventid, roominf.Userno).Scan(&nrow)
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-
-	if nrow != 0 {
-		sqlstmt = "update eventuser set point = ? where eventid = ? and userno = ?"
-		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmt, roominf.Point, eventid, roominf.Userno)
-
-		if srdblib.Dberr != nil {
-			log.Printf("InsertIntoOrUpdatePoints() update eventuser err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-		}
-
-	} else {
-		sqlstmt = "insert into eventuser (eventid, userno, istarget, iscntrbpoints, graph, color, point) values (?,?,?,?,?,?,?)"
-		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmt, eventid, roominf.Userno, "N", "N", "N", "white", roominf.Point)
-		if srdblib.Dberr != nil {
-			log.Printf("InsertIntoOrUpdatePoints() insert into eventuser err=[%s]\n", srdblib.Dberr.Error())
-			status = -1
-		}
-	}
-
-	nrow = 0
-	sqlstmt = "select count(*) from user where userno = ?"
-	srdblib.Dberr = srdblib.Db.QueryRow(sqlstmt, roominf.Userno).Scan(&nrow)
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoOrUpdatePoints() select err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-
-	log.Printf("%s userno=%d nrow=%d\n", eventid, roominf.Userno, nrow)
-
-	if nrow == 0 {
-		log.Printf(" roominf=%v\n", roominf)
-		InsertIntoUser(timestamp, eventid, roominf)
-	}
-
-	return
-}
-func InsertIntoUser(tnow time.Time, eventid string, roominf GSE5Mlib.RoomInfo) (status int) {
-
-	status = 0
-
-	userno, _ := strconv.Atoi(roominf.ID)
-	log.Printf("  *** InsertIntoUser() *** userno=%d\n", userno)
-
-	log.Printf("insert into user(*new*) userno=%d rank=<%s> nrank=<%s> prank=<%s> level=%d, followers=%d\n",
-		userno, roominf.Rank, roominf.Nrank, roominf.Prank, roominf.Level, roominf.Followers)
-
-	sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent)"
-	sql += " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
-
-	//	log.Printf("sql=%s\n", sql)
-	stmt, err := srdblib.Db.Prepare(sql)
-	if err != nil {
-		log.Printf("InsertIntoUser() error() (INSERT/Prepare) err=%s\n", err.Error())
-		status = -1
-		return
-	}
-	defer stmt.Close()
-
-	lenid := len(roominf.ID)
-	_, err = stmt.Exec(
-		userno,
-		roominf.Account,
-		roominf.Name,
-		//	roominf.ID,
-		roominf.Name,
-		roominf.ID[lenid-2:lenid],
-		roominf.Genre,
-		roominf.Rank,
-		roominf.Nrank,
-		roominf.Prank,
-		roominf.Level,
-		roominf.Followers,
-		tnow,
-		eventid,
-	)
-
-	if err != nil {
-		log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
-		//	status = -2
-		_, err = stmt.Exec(
-			userno,
-			roominf.Account,
-			roominf.Account,
-			roominf.ID,
-			roominf.ID[lenid-2:lenid],
-			roominf.Genre,
-			roominf.Rank,
-			roominf.Nrank,
-			roominf.Prank,
-			roominf.Level,
-			roominf.Followers,
-			tnow,
-			eventid,
-		)
-		if err != nil {
-			log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
-			status = -2
-		}
-	}
-
-	return
-
-}
-
-/*
-func GetRoomInfoByAPI(room_id string) (
-	genre string,
-	rank string,
-	nrank string,
-	prank string,
-	level int,
-	followers int,
-	fans int,
-	fans_lst int,
-	roomname string,
-	roomurlkey string,
-	startedat time.Time,
-	status int,
-) {
-
-	status = 0
-
-	//	https://qiita.com/takeru7584/items/f4ba4c31551204279ed2
-	url := "https://www.showroom-live.com/api/room/profile?room_id=" + room_id
-
-	resp, err := http.Get(url)
-	if err != nil {
-		//	一時的にデータが取得できない。
-		//	resp.Body.Close()
-		//		panic(err)
-		status = -1
-		return
-	}
-	defer resp.Body.Close()
-
-	//	JSONをデコードする。
-	//	次の記事を参考にさせていただいております。
-	//		Go言語でJSONに泣かないためのコーディングパターン
-	//		https://qiita.com/msh5/items/dc524e38073ed8e3831b
-
-	var result interface{}
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&result); err != nil {
-		//	panic(err)
-		status = -2
-		return
-	}
-
-	value, _ := result.(map[string]interface{})["follower_num"].(float64)
-	followers = int(value)
-
-	tnow := time.Now()
-	fans = GetAciveFanByAPI(room_id, tnow.Format("200601"))
-	yy := tnow.Year()
-	mm := tnow.Month() - 1
-	if mm < 0 {
-		yy -= 1
-		mm = 12
-	}
-	fans_lst = GetAciveFanByAPI(room_id, fmt.Sprintf("%04d%02d", yy, mm))
-
-	genre, _ = result.(map[string]interface{})["genre_name"].(string)
-
-	rank, _ = result.(map[string]interface{})["league_label"].(string)
-	ranks, _ := result.(map[string]interface{})["show_rank_subdivided"].(string)
-	rank = rank + " | " + ranks
-
-	value, _ = result.(map[string]interface{})["next_score"].(float64)
-	nrank = humanize.Comma(int64(value))
-	value, _ = result.(map[string]interface{})["prev_score"].(float64)
-	prank = humanize.Comma(int64(value))
-
-	value, _ = result.(map[string]interface{})["room_level"].(float64)
-	level = int(value)
-
-	roomname, _ = result.(map[string]interface{})["room_name"].(string)
-
-	roomurlkey, _ = result.(map[string]interface{})["room_url_key"].(string)
-
-	//	配信開始時刻の取得
-	value, _ = result.(map[string]interface{})["current_live_started_at"].(float64)
-	startedat = time.Unix(int64(value), 0).Truncate(time.Second)
-	//	log.Printf("current_live_stared_at %f %v\n", value, startedat)
-
-	return
-
-}
-
-func GetAciveFanByAPI(room_id string, yyyymm string) (nofan int) {
-
-	nofan = -1
-
-	url := "https://www.showroom-live.com/api/active_fan/room?room_id=" + room_id + "&ym=" + yyyymm
-
-	resp, err := http.Get(url)
-	if err != nil {
-		//	一時的にデータが取得できない。
-		//	resp.Body.Close()
-		//		panic(err)
-		nofan = -1
-		return
-	}
-	defer resp.Body.Close()
-
-	//	JSONをデコードする。
-	//	次の記事を参考にさせていただいております。
-	//		Go言語でJSONに泣かないためのコーディングパターン
-	//		https://qiita.com/msh5/items/dc524e38073ed8e3831b
-
-	var result interface{}
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&result); err != nil {
-		//	panic(err)
-		nofan = -2
-		return
-	}
-
-	value, _ := result.(map[string]interface{})["total_user_count"].(float64)
-	nofan = int(value)
-
-	return
-}
-*/
-
-func DeleteFromPoints(tx *sql.Tx, eventid string, ts time.Time, user_id int) {
-
-	sql := "delete from points where eventid = ? and ts= ? and user_id = ?"
-
-	//	log.Printf("Db.Exec(\"delete ...\")\n")
-	_, srdblib.Dberr = tx.Exec(sql, eventid, ts, user_id)
-
-	if srdblib.Dberr != nil {
-		log.Printf("DeleteFromPoints() select err=[%s]\n", srdblib.Dberr.Error())
-		//	status = -1
-	}
-
-}
-
-func InsertIntoTimeTable(
-	eventid string,
-	userno int,
-	st1 time.Time,
-	earnedp int,
-	stime time.Time,
-	etime time.Time,
-) (
-	status int,
-) {
-
-	status = 0
-
-	log.Printf("InsertIntoTimeTable() called. eventid=%s, userno =%d st1=%v\n", eventid, userno, st1)
-
-	var stmt *sql.Stmt
-	sql := "INSERT INTO timetable(eventid, userid, sampletm1, stime, etime, target, earnedpoint, status)"
-	sql += " VALUES(?,?,?,?,?,?,?,?)"
-	stmt, srdblib.Dberr = srdblib.Db.Prepare(sql)
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoPoints() prepare() err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-	defer stmt.Close()
-
-	_, srdblib.Dberr = stmt.Exec(eventid, userno, st1, stime, etime, -1, earnedp, 0)
-
-	if srdblib.Dberr != nil {
-		log.Printf("InsertIntoEventrank() exec() err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-
-	return
-}
-
-func MakeComment() (status int) {
-
-	status = 0
-
-	//	var userno [11]int
-	var shortname [11]string
-	var point [11]int
-	var idxtid int
-
-	filet, errt := os.OpenFile("target.txt", os.O_RDONLY, 0644)
-	if errt != nil {
-		fmt.Println(" Can't open file. [", "target.txt", "]")
-		status = 1
-		return
-	}
-	trank := 0
-	tid := 0
-	fmt.Fscanf(filet, "%d %d", &trank, &tid)
-	filet.Close()
-	//	log.Printf("trank=%d, tid=%d\n", trank, tid)
-
-	if tid == 0 {
-		//	着目すべき配信者が指定されていない
-		return
-	}
-
-	//	for id, lastscore := range scoremap {
-	scoremap.Range(func(id, value interface{}) bool {
-		//	fmt.Println("key:", id, " value:", value)
-		ls := value.(*LastScore)
-
-		idx := ls.Rank - 1
-		if trank != 0 {
-			idx = ls.Rank - trank + 5
-		}
-		//	if idx < 0 || idx > 10 {
-		if idx >= 0 && idx <= 10 {
-			if id == tid {
-				idxtid = idx
-			}
-			//	userno[idx] = id
-			if sn, ok := snmap.Load(id.(int)); ok {
-				shortname[idx] = sn.(string)
-			} else {
-				_, shortname[idx], _, _, _, _, _ = GSE5Mlib.SelectUserName(id.(int))
-				snmap.Store(id.(int), shortname[idx])
-			}
-			point[idx] = ls.Score
-		}
-		return true
-
-	})
-
-	//	log.Printf("idxtid=%d\n", idxtid)
-
-	if idxtid < 0 {
-		return
-	}
-
-	ib := 0
-
-	if trank == 0 {
-		ib := idxtid - 2
-		if ib < 0 {
-			ib = 0
-		}
-	} else {
-		ib = idxtid
-		switch idxtid {
-		case 5, 6, 7, 8:
-			ib = 4
-		case 9:
-			ib = 5
-		case 10:
-			ib = 6
-		}
-	}
-
-	ie := ib + 4
-
-	if ie > 10 {
-		ie = 10
-		ib = 6
-	}
-
-	//	log.Printf("ib=%d\n", ib)
-
-	file, err := os.OpenFile("comment.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
-	if err != nil {
-		fmt.Println(" Can't open file. [", "comment.txt", "]")
-		status = 1
-		return
-	}
-
-	for i := ib; i < ie+1; i++ {
-		if i != ib {
-			fmt.Fprintf(file, "|")
-		}
-		if point[i] == 0 {
-			fmt.Fprint(file, "**")
-		} else {
-			fmt.Fprintf(file, "%s", shortname[i])
-			if i != idxtid {
-				fmt.Fprintf(file, " %s", humanize.Comma(int64(point[i]-point[idxtid])))
-			} else {
-				if trank == 0 {
-					fmt.Fprintf(file, "(%d)", idxtid+1)
-				} else {
-					fmt.Fprintf(file, "(%d)", idxtid+trank-5)
-				}
-			}
-		}
-	}
-	fmt.Fprint(file, "\n")
-
-	file.Close()
-
-	return
-}
-
-func SelectIstargetAndIiscntrbpoint(
-	eventid string,
-	userno int,
-) (
-	istarget string,
-	iscntrbpoint string,
-	status int,
-) {
-
-	sqlstmt := "select istarget, iscntrbpoints from eventuser where eventid = ? and userno =?"
-	srdblib.Dberr = srdblib.Db.QueryRow(sqlstmt, eventid, userno).Scan(&istarget, &iscntrbpoint)
-	if srdblib.Dberr != nil {
-		log.Printf("SelectIstargetAndIiscntrbpoint() Prepare() err=%s\n", srdblib.Dberr.Error())
-		istarget = "N"
-		iscntrbpoint = "N"
-		status = -5
-	}
-
-	return
-
-}
-
-func CopyScore(gschedule Gschedule) (status int) {
-
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-
-	//	cmt0 := "=========="
-	fncname := exsrapi.FuncNameOfThisFunction(1) + "()"
-
-	//	fncname := "GetConfirmed()"
-	cmt0 := gschedule.Eventid
-	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
-	defer exsrapi.PrintExf(cmt0, fncname)()
-
-	status = 0
-
-	//	svtime := gschedule.Endtime.Add(1 * time.Second)
-	svtime := gschedule.Endtime.Add(time.Duration(ConfirmedAt) * time.Second)
-	eventid := gschedule.Eventid
-
-	log.Printf("**************** CopyScore() called.\n")
-
-	/*
-		sql := "select distinct max(ts) from points where eventid = ?"
-		stmt, err := Db.Prepare(sql)
-		if err != nil {
-			log.Printf("CopyScore() (3) err=%s\n", err.Error())
-			status = -3
-			return
-		}
-		defer stmt.Close()
-
-		//	idx := 0
-		var gtime time.Time
-		stmt.QueryRow(eventid).Scan(&gtime)
-		if err != nil {
-			log.Printf("CopyScore() (4) err=%s\n", err.Error())
-			status = -4
-			return
-		}
-	*/
-	//	var gtime time.Time
-	var nullgtime sql.NullTime
-	var gtime time.Time
-	sqlstmt := "select distinct max(ts) from points where eventid = ?"
-	srdblib.Dberr = srdblib.Db.QueryRow(sqlstmt, eventid).Scan(&nullgtime)
-	if srdblib.Dberr != nil {
-		log.Printf("CopyScore() (4) err=%s\n", srdblib.Dberr.Error())
-		status = -4
-		return
-	}
-	if nullgtime.Valid {
-		gtime = nullgtime.Time
-	} else {
-		//	データが存在しないイベントの場合
-		log.Printf("CopyScore() (4) gtime is null.\no")
-		status = -4
-		return
-	}
-
-	log.Printf("gtime=%s\n", gtime.Format("2006/01/02 15:04:06"))
-
-	if gtime.Before(gschedule.Endtime.Add(58 * time.Second)) {
-		//	終了処理が行われていない。
-
-		//	---------------------------------------------------
-
-		//	データ取得プロセスが途中で落ちた場合、イベント終了直前のデータは存在しないので
-		//	下記コメントにした部分が生きていると終了処理は行われないことになってしますのだが...
-		//
-		//	if gtime.Before(gschedule.Endtime.Add(-15 * time.Minute)) {
-		//		//	最新データ（＝イベント終了直前のデータ）が存在しない。
-		//		return
-		//	}
-
-		stmt, srdblib.Dberr = srdblib.Db.Prepare("select user_id, `rank`, point from points where eventid = ? and ts = ?")
-		if srdblib.Dberr != nil {
-			log.Printf("CopyScore() (5) err=%s\n", srdblib.Dberr.Error())
-			status = -5
-			return
-		}
-		defer stmt.Close()
-
-		rows, srdblib.Dberr = stmt.Query(eventid, gtime)
-		if srdblib.Dberr != nil {
-			log.Printf("CopyScore() (6) err=%s\n", srdblib.Dberr.Error())
-			status = -6
-			return
-		}
-		defer rows.Close()
-
-		var score GSE5Mlib.CurrentScore
-		var scorelist []GSE5Mlib.CurrentScore
-
-		i := 0
-
-		for rows.Next() {
-			srdblib.Dberr = rows.Scan(&score.Userno, &score.Rank, &score.Point)
-			if srdblib.Dberr != nil {
-				log.Printf("CopyScore() (7) err=%s\n", srdblib.Dberr.Error())
-				status = -7
-				return
-			}
-			scorelist = append(scorelist, score)
-			i++
-		}
-		if srdblib.Dberr = rows.Err(); srdblib.Dberr != nil {
-			log.Printf("CopyScore() (8) err=%s\n", srdblib.Dberr.Error())
-			status = -8
-			return
-		}
-
-		for _, score = range scorelist {
-			var roominf GSE5Mlib.RoomInfo
-			roominf.Userno = score.Userno
-			roominf.Point = score.Point
-			InsertIntoOrUpdatePoints(svtime, roominf, score.Rank, 0, eventid, "Prov.", "", "", "")
-			/*
-				_, iscntrbpoint, _ := SelectIstargetAndIiscntrbpoint(eventid, score.Userno)
-				if iscntrbpoint == "Y" {
-					//	イベント配信者設定で貢献ポイントランキングを取得すると設定されている場合
-					log.Printf("  InsertIntoTimeTable() called. eventid=%s userno=%d\n", eventid, score.Userno)
-					//	最後の2つの引数はダミー 4月13日までに修正のこと
-					InsertIntoTimeTable(eventid, score.Userno, svtime, 0, time.Now(), time.Now())
-				}
-			*/
-
-		}
-	} else {
-		log.Printf("CopyScore() (9) err=Unexpected data found\n")
-		status = -9
-	}
-
-	//	終了処理が行われていてもこのパスを通るのはデータの整合性が失われた（失わせた）ケース。
-
-	sqlstmt = "update event set rstatus = ? where eventid = ?"
-	_, srdblib.Dberr = srdblib.Db.Exec(sqlstmt, "Provisional", eventid)
-
-	if srdblib.Dberr != nil {
-		log.Printf("CopyScore() update event err=[%s]\n", srdblib.Dberr.Error())
-		status = -1
-	}
-
-	return
+// CloseResources はシャットダウン処理とリソース解放を行います。
+// defer で呼び出されることを想定しています。
+func (sm *AppShutdownManager) CloseResources() {
+	log.Println("Closing resources...")
+
+	// コンテキストをキャンセルし、新しいgoroutineの起動を停止
+	// シグナル受信などで既に呼ばれている可能性もあるが、冪等なので問題ない
+	sm.Cancel()
+	log.Println("Context cancelled.")
+
+	// WaitGroupの完了を待つのは、通常main関数で行います。
+	// ここでWaitすると、CloseResourcesがブロックされてしまい、
+	// main関数がWaitする前にリソース解放が完了しない可能性があります。
+	// そのため、Waitはmain関数に任せるのが一般的です。
+
+	// 他のリソース解放処理
+	// if sm.DB != nil {
+	// 	sm.DB.Db.Close() // gorpのDB接続をクローズ
+	// 	fmt.Println("Database connection closed.")
+	// }
+	// 他のリソース解放処理
+	log.Println("Resources closed.")
 }
 
 /*
@@ -987,7 +311,7 @@ func main() {
 	log.Println(cmt0, ">>>>>>>>>>>>>>>>>>", fncname, ">>>>>>>>>>>>>>>>>>>")
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
-	debugon := os.Getenv("DEBUG")
+	// debugon := os.Getenv("DEBUG")
 
 	//	eventmap = make(map[string]int)
 	eventmap = make(map[string]*GSE5Mlib.Event_Inf)
@@ -1066,157 +390,278 @@ func main() {
 	//      すべての処理が終了したらcookiejarを保存する。
 	defer jar.Save()
 
+	// -------------------------------------
+
+	// 1. シグナル通知用のチャネルを作成
+	// バッファリングされたチャネルにすることで、シグナル受信と処理の間に少し余裕を持たせます。
+	sigCh := make(chan os.Signal, 1)
+	// SIGINT (Ctrl+C) と SIGTERM を補足するように設定
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// 2. 新しいgoroutineの起動を制御するためのコンテキスト
+	// context.WithCancel() でキャンセル可能なコンテキストを作成します。
+	ctx, cancel := context.WithCancel(context.Background())
+	// main関数が終了する際に確実にcancel()が呼ばれるようにdeferで設定
+	// (シグナル受信時にもcancel()を呼びますが、二重呼び出しは問題ありません)
+	// defer cancel() // (sm *AppShutdownManager) CloseResources()で呼び出されるので、ここでは不要)
+
+	// 3. 実行中のgoroutineを追跡するための WaitGroup
+	var wg sync.WaitGroup
+
+	// ShutdownManager インスタンスを作成
+	// DB接続などの初期化もここで行う
+	sm := &AppShutdownManager{
+		Ctx:    ctx,
+		Cancel: cancel,
+		Wg:     &wg,
+		// DB: initDB(), // 例
+	}
+	// main関数が終了する際に、リソース解放処理を確実に実行
+	// これにより、シグナル受信、エラー終了、正常終了のいずれの場合でも呼ばれる
+	defer sm.CloseResources()
+
+	// -------------------------------------
+
 	// デーモンをrestartしたときデータの継続性を確保するためのデータを読み込む
 	RestoreScoremap()
 	//	Thmap = ReadThpoint()
 
-	var gschedulelist Gschedulelist
+	go func() {
+		var gschedulelist Gschedulelist
 
-	//	hh, _, ss := time.Now().Clock()
-	_, _, ss := time.Now().Clock()
-	if ss != 0 {
-		time.Sleep(time.Duration(61-ss) * time.Second)
-	}
-	st := time.Now()
-	//	t := st
-	_, mm, _ := st.Clock()
-	log.Printf(" start time=%s\n", st.Format("2006-01-02 15:04:05"))
+		//	hh, _, ss := time.Now().Clock()
+		_, _, ss := time.Now().Clock()
+		if ss != 0 {
+			// time.Sleep(time.Duration(61-ss) * time.Second)
+			nxt := time.Now().Add(time.Duration(61-ss) * time.Second)
+			// 毎分00秒になるまでウェイとする (例: 次の分の開始まで待つ)
+			// Contextを考慮したSleep関数を使うか、Sleep後にContextチェックが必要
+			log.Println("Waiting until next minute...")
+			select {
+			case <-sm.Ctx.Done(): // Sleep前のチェック
+				log.Println("Context cancelled before minute wait, exiting.")
+				return // または break outerloop_label
+			case <-time.After(time.Until(nxt)): // Contextを考慮しないSleepの例
+				// Sleepが完了
+			}
 
-	status := 0
-
-	for {
-		//  現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
-		//	このデータは随時更新可能なので、毎回取得する
-		gschedulelist, status = GetSchedule()
-		if status != 0 {
-			log.Printf("GetSchedule() status=%d\n", status)
-			return
 		}
-		//	fmt.Printf("now=%s t=%s status=%d len=%d\n", time.Now().Format("2006/01/02 15:04:05"), t.Format("2006/01/02 15:04:05"), status, len(gschedulelist))
+		st := time.Now()
+		//	t := st
+		_, mm, _ := st.Clock()
+		log.Printf(" start time=%s\n", st.Format("2006-01-02 15:04:05"))
 
-	outerloop:
+		status := 0
+
 		for {
-			//  未処理のタスクがなくなるまで繰り返す
+			select {
+			case <-sm.Ctx.Done(): // 外側ループ開始時のチェック
+				log.Println("Outer loop: Context cancelled, exiting.")
+				return // または break outerloop_label
+			default:
+				// Contextはまだ有効
+			}
 
-			//  現在の分で実行が必要なタスクのなかから実行の秒がいちばん小さなタスクを見つける
+			//  現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
+			//	このデータは随時更新可能なので、毎回取得する
+			gschedulelist, status = GetSchedule()
+			if status != 0 {
+				log.Printf("GetSchedule() status=%d\n", status)
+				return
+			}
+			//	fmt.Printf("now=%s t=%s status=%d len=%d\n", time.Now().Format("2006/01/02 15:04:05"), t.Format("2006/01/02 15:04:05"), status, len(gschedulelist))
+
+		outerloop:
 			for {
-				nextsec := 99
-				idx := -1
+				//  未処理のタスクがなくなるまで繰り返す
 
-				for i := 0; i < len(gschedulelist); i++ {
-					if gschedulelist[i].Done {
-						//	すでに実行されたタスク
-						continue
-					}
-					if mm%gschedulelist[i].Intervalmin == gschedulelist[i].Modmin {
-						tnextsec := gschedulelist[i].Modsec
-						if tnextsec < nextsec {
-							nextsec = tnextsec
-							idx = i
-						}
-					}
+				select {
+				case <-sm.Ctx.Done(): // 中間ループ開始時のチェック
+					fmt.Println("Middle loop: Context cancelled, exiting.")
+					return // または break outerloop_label
+				default:
+					// Contextはまだ有効
 				}
 
-				if idx > -1 {
-					//  処理すべきタスクが存在する
-					//	hh, mm, ss = time.Now().Clock()
-					_, tmm, tss := time.Now().Clock()
-					if tmm == mm && tss < nextsec {
-						//  まだ処理すべき秒に達していない
-						time.Sleep(time.Duration(nextsec-tss) * time.Second)
-					}
-					log.Printf("%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
-					switch gschedulelist[idx].Method {
-					case "GetScore":
-						//  獲得ポイント取得( GetPointsAll() called )
-						if debugon == "ON" {
-							ScanActive(client, gschedulelist[idx])
-						} else {
-							go ScanActive(client, gschedulelist[idx])
-						}
-					case "CopyScore":
-						//	最終取得データのコピーを作成する（最終結果格納の準備）
-						if debugon == "ON" {
-							CopyScore(gschedulelist[idx])
-						} else {
-							go CopyScore(gschedulelist[idx])
-						}
-					// case "GetConfirmed":
-					// 	//  最終結果の取得
-					// 	if debugon == "ON" {
-					// 		GetConfirmed(gschedulelist[idx])
-					// 	} else {
-					// 		go GetConfirmed(gschedulelist[idx])
-					// 	}
+				//  現在の分で実行が必要なタスクのなかから実行の秒がいちばん小さなタスクを見つける
+				for {
+					select {
+					case <-sm.Ctx.Done(): // 内側ループ開始時のチェック (必要なら)
+						log.Println("Inner loop: Context cancelled, exiting.")
+						return // または break outerloop_label
 					default:
+						// Contextはまだ有効
 					}
-					gschedulelist[idx].Done = true
-				} else {
-					break outerloop
+					nextsec := 99
+					idx := -1
+
+					for i := 0; i < len(gschedulelist); i++ {
+						if gschedulelist[i].Done {
+							//	すでに実行されたタスク
+							continue
+						}
+						if mm%gschedulelist[i].Intervalmin == gschedulelist[i].Modmin {
+							tnextsec := gschedulelist[i].Modsec
+							if tnextsec < nextsec {
+								nextsec = tnextsec
+								idx = i
+							}
+						}
+					}
+
+					if idx > -1 {
+						//  処理すべきタスクが存在する
+						//	hh, mm, ss = time.Now().Clock()
+						_, tmm, tss := time.Now().Clock()
+						if tmm == mm && tss < nextsec {
+							//  まだ処理すべき秒に達していない
+							// time.Sleep(time.Duration(nextsec-tss) * time.Second)
+							nxt := time.Now().Add(time.Duration(nextsec-tss) * time.Second)
+							// 毎分00秒になるまでウェイとする (例: 次のタスクの開始まで待つ)
+							// Contextを考慮したSleep関数を使うか、Sleep後にContextチェックが必要
+							log.Println("Waiting until next minute...")
+							select {
+							case <-sm.Ctx.Done(): // Sleep前のチェック
+								log.Println("Context cancelled before minute wait, exiting.")
+								return // または break outerloop_label
+							case <-time.After(time.Until(nxt)): // Contextを考慮しないSleepの例
+								// Sleepが完了
+							}
+
+						}
+						log.Printf("%s method=%s\n", gschedulelist[idx].Eventid, gschedulelist[idx].Method)
+
+						switch gschedulelist[idx].Method {
+						case "GetScore":
+							//  獲得ポイント取得( GetPointsAll() called )
+							// if debugon == "ON" {
+							// 	ScanActive(client, gschedulelist[idx])
+							// } else {
+							// Contextがキャンセルされていないか最終チェックしてからgoroutine起動
+							select {
+							case <-sm.Ctx.Done():
+								log.Println("Context cancelled before spawning func1, skipping.")
+								break outerloop // 中間ループを抜ける
+							default:
+								sm.Wg.Add(1) // goroutine起動直前にAdd
+								go func() {
+									defer sm.Wg.Done() // goroutine終了時にDone
+									log.Println("ScanActive goroutine started.")
+									// func1 の実際の処理
+									// Contextを渡して処理中にキャンセルをチェックすることも可能
+									// processTask1(sm.Ctx, taskData)
+									// time.Sleep(time.Second) // 処理をシミュレート
+									ScanActive(client, gschedulelist[idx])
+									log.Println("func1 goroutine finished.")
+								}()
+							}
+
+							// }
+						case "CopyScore":
+							//	最終取得データのコピーを作成する（最終結果格納の準備）
+							// if debugon == "ON" {
+							// 	CopyScore(gschedulelist[idx])
+							// } else {
+							// Contextがキャンセルされていないか最終チェックしてからgoroutine起動
+							select {
+							case <-sm.Ctx.Done():
+								log.Println("Context cancelled before spawning func1, skipping.")
+								break outerloop // 中間ループを抜ける
+							default:
+								sm.Wg.Add(1) // goroutine起動直前にAdd
+								go func() {
+									defer sm.Wg.Done() // goroutine終了時にDone
+									log.Println("CopyScore goroutine started.")
+									// func1 の実際の処理
+									// Contextを渡して処理中にキャンセルをチェックすることも可能
+									// processTask1(sm.Ctx, taskData)
+									// time.Sleep(time.Second) // 処理をシミュレート
+									CopyScore(gschedulelist[idx])
+									log.Println("func1 goroutine finished.")
+								}()
+							}
+
+							// }
+						// case "GetConfirmed":
+						// 	//  最終結果の取得
+						// 	if debugon == "ON" {
+						// 		GetConfirmed(gschedulelist[idx])
+						// 	} else {
+						// 		go GetConfirmed(gschedulelist[idx])
+						// 	}
+						default:
+						}
+						gschedulelist[idx].Done = true
+					} else {
+						break outerloop
+					}
 				}
 			}
-		}
 
-		/*
-			//	毎日偶数時 5分に特定ユーザーのユーザー情報を取得する
-			//	レベルやフォロワー数の推移を記録する
-			//	if hh%6 == 3 && mm == 1 {
-			if hh%2 == 0 && mm == 5 {
-				GSE5Mlib.GetUserInfForHistory()
-			}
-		*/
-
-		//	毎分00秒になるまで待つ
-		_, tmm, tss := time.Now().Clock()
-		w := 60 - tss
-		if tmm == mm {
-			if w > 30 && tmm%5 == 0 {
-				time.Sleep(5 * time.Second)
-				SaveScoremap()
-				//	Thmap = ReadThpoint()
-			}
-			time.Sleep(time.Duration(w) * time.Second)
-		}
-		//	t = time.Now()
-		//	hh, mm, _ = time.Now().Clock()
-		_, mm, _ = time.Now().Clock()
-		/*
-			hh24 := mm
-			if hh24 == 0 {
-				hh24 = 24
-			}
-				if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
-					//	一定時間経ったら処理を終了する
-					break outerloop
+			//	毎分00秒になるまで待つ
+			_, tmm, tss := time.Now().Clock()
+			w := 60 - tss
+			if tmm == mm {
+				if w > 30 && tmm%5 == 0 {
+					time.Sleep(5 * time.Second)
+					SaveScoremap()
+					//	Thmap = ReadThpoint()
 				}
-		*/
-	}
-	//	log.Printf(" end time=%s\n", t.Format("2006-01-02 15:04:05"))
-}
-
-/*
-func ReadThpoint() (thmap map[string][2]int) {
-
-	thmap = make(map[string][2]int)
-
-	file, err := os.Open("thpoint.txt")
-	if err != nil {
-		log.Printf("ReadThpoint() err=%s\n", err.Error())
-		return
-	}
-	defer file.Close()
-
-	var val [2]int
-	var eventid string
-	for {
-		n, err := fmt.Fscanf(file, "%s%d%d\n", &eventid, &val[0], &val[1])
-		if n != 3 || err != nil {
-			log.Printf("ReadTpoint() n=%d err=%s\n", n, err.Error())
-			break
+				// time.Sleep(time.Duration(w) * time.Second)
+				nxt := time.Now().Add(time.Duration(w) * time.Second)
+				// 毎分00秒になるまでウェイとする (例: 次の分の開始まで待つ)
+				// Contextを考慮したSleep関数を使うか、Sleep後にContextチェックが必要
+				log.Println("Waiting until next minute...")
+				select {
+				case <-sm.Ctx.Done(): // Sleep前のチェック
+					log.Println("Context cancelled before minute wait, exiting.")
+					return // または break outerloop_label
+				case <-time.After(time.Until(nxt)): // Contextを考慮しないSleepの例
+					// Sleepが完了
+				}
+			}
+			//	t = time.Now()
+			//	hh, mm, _ = time.Now().Clock()
+			_, mm, _ = time.Now().Clock()
+			/*
+				hh24 := mm
+				if hh24 == 0 {
+					hh24 = 24
+				}
+					if hh24%GSE5Mlib.Dbconfig.TimeLimit == 0 && mm == 0 {
+						//	一定時間経ったら処理を終了する
+						break outerloop
+					}
+			*/
 		}
-		thmap[eventid] = val
-	}
-	log.Printf("thmap=%+v\n", thmap)
-	return
+		//	log.Printf(" end time=%s\n", t.Format("2006-01-02 15:04:05"))
+	}()
+
+	// シグナル受信を待つ
+	<-sigCh
+	log.Println("\nシグナルを受信しました。")
+
+	// シグナル受信をトリガーとして、ShutdownManager経由でキャンセルを呼び出す
+	// これにより、Contextを監視しているgoroutineが終了を開始する
+	// deferされたCloseResourcesでもCancelは呼ばれるが、シグナル受信時に
+	// 即座にキャンセルをトリガーしたい場合はここで明示的に呼ぶ
+	// (CloseResources内でCancelを呼ぶ設計の場合は、ここでの明示的な呼び出しは不要)
+	// 今回はCloseResources内でCancelを呼ぶ設計なので、ここはコメントアウト
+	// sm.Cancel()
+	log.Println("シャットダウン処理を開始します。")
+
+	// ShutdownManager経由でWaitを呼び、実行中のすべてのgoroutineが終了するのを待つ
+	// Contextがキャンセルされた後、すべてのワーカーgoroutineがDone()を呼ぶのを待つ
+	log.Println("実行中のすべてのgoroutineが終了するのを待っています...")
+	sm.Wg.Wait()
+
+	// Wait()から戻ったら、すべてのgoroutineが終了したことになります。
+	// main関数が終了するため、defer sm.CloseResources() が呼ばれ、
+	// リソース解放処理が行われます。
+	log.Println("すべてのgoroutineが終了しました。")
+	// main関数が終了すると、deferが実行され、プログラムが終了します。
+
+	// 最後に次回再開時に必要な作業用データを保存する。
+	SaveScoremap()
+
 }
-*/
