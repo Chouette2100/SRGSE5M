@@ -31,9 +31,10 @@ import (
 021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 021AA01	VSCaodeで発生したエラーを修正する（処理には影響しない）
 021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
+021AZ02	srdblib.Dberrをすべてerrとする
 */
 
-const Version = "021AW00"
+const Version = "021AZ02"
 
 type Event_Inf struct {
 	Event_ID    string

@@ -43,6 +43,7 @@ import (
 
 func GetConfirmed(gschedule Gschedule) (status int) {
 
+	var err error
 	var eventinf GSE5Mlib.Event_Inf
 	var roominflist GSE5Mlib.RoomInfoList
 	//	var roominf RoomInfo
@@ -84,10 +85,10 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	log.Printf("%s isconfirm =%t, isquest=%t\n", eventid, isconfirm, isquest)
 	if isconfirm || isquest {
 		sqlstmt := "update event set rstatus = ? where eventid = ?"
-		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmt, "Confirmed", eventid)
+		_, err = srdblib.Db.Exec(sqlstmt, "Confirmed", eventid)
 
-		if srdblib.Dberr != nil {
-			log.Printf("%s GetConfirmed() update event err=[%s]\n", eventid, srdblib.Dberr.Error())
+		if err != nil {
+			log.Printf("%s GetConfirmed() update event err=[%s]\n", eventid, err.Error())
 			status = -1
 			return
 		}

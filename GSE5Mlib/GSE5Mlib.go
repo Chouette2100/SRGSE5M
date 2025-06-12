@@ -79,11 +79,11 @@ import (
 	021AE00	GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
 	021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 	021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
-
+	Ver. 021AZ02	srdblib.Dberrをすべてerrとする
 
 */
 
-const Version = "021AW00"
+const Version = "021AZ02"
 
 type Event_Inf struct {
 	Event_ID    string
@@ -1169,16 +1169,16 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 			sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
 			//	log.Printf("sql=%s\n", sql)
-			stmt1, srdblib.Dberr = srdblib.Db.Prepare(sql)
-			if srdblib.Dberr != nil {
-				log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", srdblib.Dberr.Error())
+			stmt1, err = srdblib.Db.Prepare(sql)
+			if err != nil {
+				log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", err.Error())
 				status = -1
 				return
 			}
 			defer stmt1.Close()
 
 			lenid := len(roominf.ID)
-			_, srdblib.Dberr = stmt1.Exec(
+			_, err = stmt1.Exec(
 				userno,
 				roominf.Account,
 				roominf.Name,
@@ -1194,10 +1194,10 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 				eventid,
 			)
 
-			if srdblib.Dberr != nil {
-				log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
+			if err != nil {
+				log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
 				//	status = -2
-				_, srdblib.Dberr = stmt1.Exec(
+				_, err = stmt1.Exec(
 					userno,
 					roominf.Account,
 					roominf.Account,
@@ -1212,8 +1212,8 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 					tnow,
 					eventid,
 				)
-				if srdblib.Dberr != nil {
-					log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
+				if err != nil {
+					log.Printf("error(InsertIntoOrUpdateUser() INSERT/Exec) err=%s\n", err.Error())
 					status = -2
 				}
 			}
@@ -1223,9 +1223,9 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 		} else {
 
 			sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
-			srdblib.Dberr = srdblib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
-			if srdblib.Dberr != nil {
-				log.Printf("err=[%s]\n", srdblib.Dberr.Error())
+			err = srdblib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
+			if err != nil {
+				log.Printf("err=[%s]\n", err.Error())
 				status = -1
 			}
 			//	log.Printf("current userno=%d name=%s, nrank=%s, level=%d, followers=%d\n", userno, name, nrank, level, followers)
@@ -1253,16 +1253,16 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 				sql += "currentevent=? "
 				sql += "where userno=?"
 
-				stmt2, srdblib.Dberr = srdblib.Db.Prepare(sql)
+				stmt2, err = srdblib.Db.Prepare(sql)
 
-				if srdblib.Dberr != nil {
-					log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", srdblib.Dberr.Error())
+				if err != nil {
+					log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", err.Error())
 					status = -1
 					return
 				}
 				defer stmt2.Close()
 
-				_, srdblib.Dberr = stmt2.Exec(
+				_, err = stmt2.Exec(
 					roominf.Account,
 					roominf.Name,
 					roominf.Genre,
@@ -1276,8 +1276,8 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 					roominf.ID,
 				)
 
-				if srdblib.Dberr != nil {
-					log.Printf("error(InsertIntoOrUpdateUser() Update/Exec) err=%s\n", srdblib.Dberr.Error())
+				if err != nil {
+					log.Printf("error(InsertIntoOrUpdateUser() Update/Exec) err=%s\n", err.Error())
 					status = -2
 				}
 			}
@@ -1289,16 +1289,16 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 		if isnew {
 			sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
 			//	log.Printf("sql=%s\n", sql)
-			stmt3, srdblib.Dberr = srdblib.Db.Prepare(sql)
-			if srdblib.Dberr != nil {
-				log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", srdblib.Dberr.Error())
+			stmt3, err = srdblib.Db.Prepare(sql)
+			if err != nil {
+				log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", err.Error())
 				status = -1
 				stmt3.Close()
 				return
 			}
 			defer stmt3.Close()
 
-			_, srdblib.Dberr = stmt3.Exec(
+			_, err = stmt3.Exec(
 				userno,
 				roominf.Name,
 				roominf.Genre,
@@ -1310,10 +1310,10 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 				tnow,
 			)
 
-			if srdblib.Dberr != nil {
-				log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
+			if err != nil {
+				log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", err.Error())
 				//	status = -2
-				_, srdblib.Dberr = stmt3.Exec(
+				_, err = stmt3.Exec(
 					userno,
 					roominf.Account,
 					roominf.Genre,
@@ -1324,8 +1324,8 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 					roominf.Followers,
 					tnow,
 				)
-				if srdblib.Dberr != nil {
-					log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", srdblib.Dberr.Error())
+				if err != nil {
+					log.Printf("error(Insert Into into userhistory INSERT/Exec) err=%s\n", err.Error())
 					status = -2
 				}
 			}
@@ -1834,23 +1834,24 @@ func SelectUserColor(userno int, eventid string) (
 
 func SelectRoomLevel(userno int, levelonly int) (roomlevelinf RoomLevelInf, status int) {
 
+	var err error
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
 	status = 0
 
 	sqlstmt := "select user_name, genre, `rank`, nrank, prank, level, followers, ts from userhistory where userno = ? order by ts desc"
-	stmt, srdblib.Dberr = srdblib.Db.Prepare(sqlstmt)
-	if srdblib.Dberr != nil {
-		log.Printf("SelectRoomLevel() (3) err=%s\n", srdblib.Dberr.Error())
+	stmt, err = srdblib.Db.Prepare(sqlstmt)
+	if err != nil {
+		log.Printf("SelectRoomLevel() (3) err=%s\n", err.Error())
 		status = -3
 		return
 	}
 	defer stmt.Close()
 
-	rows, srdblib.Dberr = stmt.Query(userno)
-	if srdblib.Dberr != nil {
-		log.Printf("SelectRoomLevel() (6) err=%s\n", srdblib.Dberr.Error())
+	rows, err = stmt.Query(userno)
+	if err != nil {
+		log.Printf("SelectRoomLevel() (6) err=%s\n", err.Error())
 		status = -6
 		return
 	}
@@ -1881,9 +1882,9 @@ func SelectRoomLevel(userno int, levelonly int) (roomlevelinf RoomLevelInf, stat
 	lastlevel := 0
 
 	for rows.Next() {
-		srdblib.Dberr = rows.Scan(&roomlevel.User_name, &roomlevel.Genre, &roomlevel.Rank, &roomlevel.Nrank, &roomlevel.Prank, &roomlevel.Level, &roomlevel.Followers, &roomlevel.ts)
-		if srdblib.Dberr != nil {
-			log.Printf("GetCurrentScore() (7) err=%s\n", srdblib.Dberr.Error())
+		err = rows.Scan(&roomlevel.User_name, &roomlevel.Genre, &roomlevel.Rank, &roomlevel.Nrank, &roomlevel.Prank, &roomlevel.Level, &roomlevel.Followers, &roomlevel.ts)
+		if err != nil {
+			log.Printf("GetCurrentScore() (7) err=%s\n", err.Error())
 			status = -7
 			return
 		}
@@ -2014,6 +2015,7 @@ func SelectEventuserList(eventid string) (userlist []User, status int) {
 
 func SelectEventList(userno int) (eventlist []Event, status int) {
 
+	var err error
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
@@ -2025,9 +2027,9 @@ func SelectEventList(userno int) (eventlist []Event, status int) {
 		}
 	*/
 
-	stmt, srdblib.Dberr = srdblib.Db.Prepare("select eventid, event_name from event where endtime IS not null and nobasis = ? order by endtime desc")
-	if srdblib.Dberr != nil {
-		log.Printf("err=[%s]\n", srdblib.Dberr.Error())
+	stmt, err = srdblib.Db.Prepare("select eventid, event_name from event where endtime IS not null and nobasis = ? order by endtime desc")
+	if err != nil {
+		log.Printf("err=[%s]\n", err.Error())
 		status = -1
 		return
 	}
@@ -2040,9 +2042,9 @@ func SelectEventList(userno int) (eventlist []Event, status int) {
 			rows, Err = stmt.Query()
 		}
 	*/
-	rows, srdblib.Dberr = stmt.Query(userno)
-	if srdblib.Dberr != nil {
-		log.Printf("err=[%s]\n", srdblib.Dberr.Error())
+	rows, err = stmt.Query(userno)
+	if err != nil {
+		log.Printf("err=[%s]\n", err.Error())
 		status = -1
 		return
 	}
@@ -2051,9 +2053,9 @@ func SelectEventList(userno int) (eventlist []Event, status int) {
 	var event Event
 	i := 0
 	for rows.Next() {
-		srdblib.Dberr = rows.Scan(&event.EventID, &event.EventName)
-		if srdblib.Dberr != nil {
-			log.Printf("err=[%s]\n", srdblib.Dberr.Error())
+		err = rows.Scan(&event.EventID, &event.EventName)
+		if err != nil {
+			log.Printf("err=[%s]\n", err.Error())
 			status = -1
 			return
 		}
@@ -2065,8 +2067,8 @@ func SelectEventList(userno int) (eventlist []Event, status int) {
 			}
 		*/
 	}
-	if srdblib.Dberr = rows.Err(); srdblib.Dberr != nil {
-		log.Printf("err=[%s]\n", srdblib.Dberr.Error())
+	if err = rows.Err(); err != nil {
+		log.Printf("err=[%s]\n", err.Error())
 		status = -1
 		return
 	}

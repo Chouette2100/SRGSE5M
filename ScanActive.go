@@ -54,6 +54,8 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 		}
 	}()
 
+	var err error
+
 	var stmt *sql.Stmt
 	var rows *sql.Rows
 
@@ -64,17 +66,17 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
-	stmt, srdblib.Dberr = srdblib.Db.Prepare(sqlstmt)
-	if srdblib.Dberr != nil {
-		log.Printf("ScanActive() Prepare() err=%s\n", srdblib.Dberr.Error())
+	stmt, err = srdblib.Db.Prepare(sqlstmt)
+	if err != nil {
+		log.Printf("ScanActive() Prepare() err=%s\n", err.Error())
 		status = -5
 		return
 	}
 	defer stmt.Close()
 
-	rows, srdblib.Dberr = stmt.Query(gschedule.Eventid)
-	if srdblib.Dberr != nil {
-		log.Printf("ScanActive() Query() (6) err=%s\n", srdblib.Dberr.Error())
+	rows, err = stmt.Query(gschedule.Eventid)
+	if err != nil {
+		log.Printf("ScanActive() Query() (6) err=%s\n", err.Error())
 		status = -6
 		return
 	}
@@ -99,8 +101,8 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 
 	}
 
-	if srdblib.Dberr = rows.Err(); srdblib.Dberr != nil {
-		log.Printf("ScanActive() rows err=%s\n", srdblib.Dberr.Error())
+	if err = rows.Err(); err != nil {
+		log.Printf("ScanActive() rows err=%s\n", err.Error())
 		status = -8
 		return
 	}
@@ -120,6 +122,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 */
 func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cntrblist []string) (status int) {
 
+	var err error
 	status = 0
 
 	eventid := gschedule.Eventid
@@ -130,10 +133,10 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		//	イベントが終了した
 		log.Printf("%s set rstatus = DontGetScore.\n", eventid)
 		sqlstmte := "update event set rstatus = ? where eventid = ?"
-		_, srdblib.Dberr = srdblib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
+		_, err = srdblib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
 
-		if srdblib.Dberr != nil {
-			log.Printf("%s update event err=[%s]\n", eventid, srdblib.Dberr.Error())
+		if err != nil {
+			log.Printf("%s update event err=[%s]\n", eventid, err.Error())
 		}
 	}
 
@@ -159,7 +162,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	}
 
 	var pranking *srapi.Eventranking
-	var err error
+	// var err error
 
 	//	50位までのルームの順位、ポイントを取得する(ランキングイベントに限る)
 	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
@@ -432,9 +435,9 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	nu := make([]newuser, 0, 50)
 
 	var tx *sql.Tx
-	tx, srdblib.Dberr = srdblib.Db.Begin()
-	if srdblib.Dberr != nil {
-		log.Printf("%s srdblib.Db.Begin() err=[%s]\n", eventid, srdblib.Dberr.Error())
+	tx, err = srdblib.Db.Begin()
+	if err != nil {
+		log.Printf("%s srdblib.Db.Begin() err=[%s]\n", eventid, err.Error())
 		return -1
 	}
 	defer tx.Rollback()
