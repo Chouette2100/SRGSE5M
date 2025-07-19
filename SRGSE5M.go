@@ -182,13 +182,14 @@ import (
 	Ver. 021AZ00	シグナルを捕捉して終了するようにする(グレイスフルシャットダウン)
 	Ver. 021AZ01	シグナルを検出したときのメッセージを実態に合わせる。main.goをmain.goとInsertIntoPoints.goに分離する。
 	Ver. 021AZ02	srdblib.Dberrをすべてerrとする
+	Ver. 021BA00    GetPointsAll()でのイベント終了時の検出を獲得ポイント取得時にも行う。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "021AZ02"
+const version = "021BA00"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
