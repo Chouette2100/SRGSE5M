@@ -184,6 +184,7 @@ import (
 	Ver. 021AZ02	srdblib.Dberrをすべてerrとする
 	Ver. 021BA00    GetPointsAll()でのイベント終了時の検出を獲得ポイント取得時にも行う。
 	Ver. 021BA01    main()でのdefer srdblib.Dbmap.Db.Close()のもれを補う
+	Ver. 200100     go.modを作り直す。
 
 
 	課題
@@ -191,7 +192,7 @@ import (
 
 */
 
-const version = "021BA01"
+const version = "200100"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
