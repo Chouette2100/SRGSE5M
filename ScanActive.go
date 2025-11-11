@@ -4,20 +4,11 @@
 package main
 
 import (
-	//	"crypto/aes"
 	"fmt"
 	"log"
-	//	"os"
 	"strconv"
 	"strings"
-	//	"sync"
 	"time"
-
-	//	. "log"
-	//	"bufio"
-	//	"io"
-
-	//	"runtime"
 
 	"net/http"
 
@@ -25,14 +16,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	//	"github.com/go-gorp/gorp"
-
-	//	"encoding/json"
-	//	"github.com/360EntSecGroup-Skylar/excelize"
-
-	//	. "MyModule/ShowroomCGIlib"
 	"SRGSE5M/GSE5Mlib"
-	//	"SRGSE5M/SRDBlib"
 
 	"github.com/dustin/go-humanize"
 
@@ -41,15 +25,13 @@ import (
 	"github.com/Chouette2100/srdblib/v2"
 )
 
-/*
-各配信者さんの獲得ポイントのリストを作る（ファイルに追記する）
-ファイルは獲得ポイントを横並びにしたものと、各配信者さんの順位、獲得ポイント、
-*/
+// gscheduleで指定したイベントについて配信者さんの獲得ポイントを取得し、保存条件に合致するものをDBに保存する。
 func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 
+	// 異常終了による処理の中断を防止する。
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered from panic:", r)
+			log.Println("Recovered from panic:", r)
 		}
 	}()
 
@@ -106,14 +88,10 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 		return
 	}
 
-	//	log.Println("ScanActive() idlist=", idlist)
-	//	if len(idlist) != 0 {
-	//	status = GetPointsAll(idlist, gschedule, cntrblist)
 	GetPointsAll(client, idlist, gschedule, cntrblist)
 	//	}
 
 	return
-
 }
 
 /*
@@ -176,60 +154,13 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		lpr = len(pranking.Ranking)
 	}
 	log.Printf("%s GetEventsRankingByApi() =%d\n", eventid, lpr)
-	//	if lpr > 0 &&  lpr < gschedule.Toorder - 5 {
-	//		thpoint =  0
-	//	} else if lpr > gschedule.Toorder - 6 {
-	//			 hh := time.Since(gschedule.Starttime).Hours()
-	//			 thpoint =  400 * ( int(hh) + 4)
-	//			 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
-	//			 log.Printf("%s lpr=%d hh=%d thpoint=%d\n", eventid, lpr, int(hh), thpoint)
-	//	}
 
-	//	noranking := false
-	// if len(pranking.Ranking) == 0 {
 	if lpr == 0 {
 		//	1. レベルイベント（GetEventsRankingByApi()で獲得ポイントを取得できない）
 		//	2. イベント開始前
 		//	3. イベントエントリーなし
 		//	noranking = true
-		/*
-			roomlistinf, err := srapi.GetRoominfFromEventByApi(
-				client,
-				gschedule.Ieventid, //	Event_id (int) event_url_key ではないことに注意
-				gschedule.Fromorder,
-				gschedule.Toorder,
-			)
-			if err != nil {
-				err = fmt.Errorf("srapi.GetRoominfFromEventByApi() returned error. %w", err)
-				log.Printf("%s srapi.GetRoominfFromEventByApi() err=[%s]\n", eventid, err.Error())
-			}
 
-			//	lrr := len(roomlistinf.RoomList)
-			//	log.Printf("%s srapi.GetRoominfFromEventByApi() =%d\n", eventid, lrr)
-			//	if lrr >  gschedule.Toorder -6 {
-			//		 hh := time.Since(gschedule.Starttime).Hours()
-			//		 thpoint =  400 * ( int(hh) + 4)
-			//		 log.Printf("%s Starttime=%s Hours=%7.2f\n", eventid, gschedule.Starttime.Format("2006-01-02 15:04:05"), hh)
-			//		 log.Printf("%s lrr=%d hh=%d thpoint=%d\n", eventid, lrr, int(hh), thpoint)
-			//	}
-
-			for _, room := range roomlistinf.RoomList {
-				//	if room.Rank < 2 {
-				//		//TODO: 除外の条件が厳しすぎる？
-				//		break
-				//	}
-				userno := room.Room_id
-				if _, ok := umap[userno]; !ok {
-					//	srdblib.UpinsEventuser(client, -1, 0, gschedule.Eventid, gschedule.Starttime, userno, timestamp)
-					idList = append(idList, strconv.Itoa(userno))
-					cntrblist = append(cntrblist, "N")
-				}
-				//	cntrblist := append(cntrblist, "N")
-				//	//		GetPointsAll(idlist, gschedule, cntrblist)
-				//	GetPointsAll(client, idlist, gschedule, cntrblist)
-				//	time.Sleep(time.Duration(gschedule.Intervalmin+1) * time.Minute)
-			}
-		*/
 		var erl *srapi.EventRanking
 		erl, err = srapi.GetEventRankingByApi(client, gschedule.Eventid, gschedule.Fromorder, gschedule.Toorder)
 		if err != nil {

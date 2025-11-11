@@ -4,8 +4,8 @@ github.com/Chouette2100/exsrapi/v2 v2.3.1 h1:2SzilQ6oZAb4dm015RFN1AcXPvUTQB9wtlX
 github.com/Chouette2100/exsrapi/v2 v2.3.1/go.mod h1:ShAqrBSImYKjSI5dI0xmHkKLj0hOLm8tSLsnFg/JRtE=
 github.com/Chouette2100/srapi/v2 v2.3.4 h1:khe2Dzf/y7PaR8J9y4ZNsvoawXQ/b5mjfU/R1hQ7OwY=
 github.com/Chouette2100/srapi/v2 v2.3.4/go.mod h1:vIJVKphAHMIy+LvCYUzGmsWRgNLTMJnH2D1WOgdKabQ=
-github.com/Chouette2100/srdblib/v2 v2.3.9 h1:fqyUorhrub2zG6du8aXCeSQQ6EbD2In2aKmZG/x3RoQ=
-github.com/Chouette2100/srdblib/v2 v2.3.9/go.mod h1:qr/lEaTJsNgW9O7c0GIfQ8+KwZN6BO1aQDmlhD1SThM=
+github.com/Chouette2100/srdblib/v2 v2.4.3 h1:HYgQXAejYXqYRorDaiH3ZcO2HxMcvlBkypKphLA25UY=
+github.com/Chouette2100/srdblib/v2 v2.4.3/go.mod h1:kybGPiDgHqBcTgOgr3vVnG9czZhpDmzCv720MzKJi6c=
 github.com/PuerkitoBio/goquery v1.10.3 h1:pFYcNSqHxBD06Fpj/KsbStFRsgRATgnf3LeXiUkhzPo=
 github.com/PuerkitoBio/goquery v1.10.3/go.mod h1:tMUX0zDMHXYlAQk6p35XxQMqMweEKB7iK7iLNd4RH4Y=
 github.com/andybalholm/cascadia v1.3.3 h1:AG2YHrzJIm4BZ19iwJ/DAua6Btl3IwJX+VI4kktS1LM=

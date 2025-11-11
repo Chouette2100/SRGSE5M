@@ -185,14 +185,14 @@ import (
 	Ver. 021BA00    GetPointsAll()でのイベント終了時の検出を獲得ポイント取得時にも行う。
 	Ver. 021BA01    main()でのdefer srdblib.Dbmap.Db.Close()のもれを補う
 	Ver. 200100     go.modを作り直す。
-
+	Ver. 200101     ScanActive()で異常終了時の出力をlog出力に変更する。
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "200100"
+const version = "200101"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
