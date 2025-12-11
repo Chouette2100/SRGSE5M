@@ -413,7 +413,10 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 				if idxq, ok := qmap[uno]; ok {
 					//	ルームがbloc_id=0の100位以内リストにある
 					//	log.Printf("%s rank=%d, qrank=%d\n", eventid, rank, (*qlist)[idxq].Rank)
-					rank = (*qlist)[idxq].Rank
+					// rank = (*qlist)[idxq].Rank // FIXME: 結果の取得タイミングによって順序が変わったとき間違った順位がセットされる
+					if rank == 0 {
+						rank = (*qlist)[idxq].Rank
+					}
 				} else {
 					//	block_id=0の100位以内リストにルームがない
 					rank = 9999
