@@ -188,13 +188,14 @@ import (
 	Ver. 200101     ScanActive()で異常終了時の出力をlog出力に変更する。
 	Ver. 200102     srapiの変更（useragent）、go 1.25.4
 	Ver. 200103     ScanActive()でblockid=0のときのrankの更新は原則としてしない
+	Ver. 200104     暫定結果の取得にあわせ、rstatus=="Provisional"にrstatus = "ProvisionalC"の条件も加える
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "200103"
+const version = "200104"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。

@@ -42,7 +42,7 @@ import (
 	"github.com/Chouette2100/srdblib/v2"
 )
 
-//  現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
+// 現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
 func GetSchedule() (
 	gschedulelist Gschedulelist,
 	status int,
@@ -74,7 +74,7 @@ func GetSchedule() (
 	defer stmt.Close()
 
 	//	endtimeの比較対象を現在時から48時間マイナスしてあるのは、翌日発表の確定値を取得する必要あるイベントも含めるため
-	rows, Err = stmt.Query(tnow, tnow.Add(-48 * time.Hour))
+	rows, Err = stmt.Query(tnow, tnow.Add(-48*time.Hour))
 	if Err != nil {
 		log.Printf("GetSchedule() Query() (6) err=%s\n", Err.Error())
 		status = -6
@@ -115,10 +115,10 @@ func GetSchedule() (
 		if rstatus == "" {
 			//	イベント期間中は獲得ポイントデータを取得する。
 			gschedule.Method = "GetScore"
-		} else if tnow.After(endtime.Add(1*time.Minute)) && rstatus != "Provisional" {
+		} else if tnow.After(endtime.Add(1*time.Minute)) && (rstatus != "Provisional" && rstatus != "ProvisionalC") {
 			//	イベント終了後、最終結果を格納するためのレコードを一回だけ追加する。
 			gschedule.Method = "CopyScore"
-		} else if rstatus == "Provisional" && tnow.After(end_date.Add(660*time.Minute)) {
+		} else if (rstatus == "Provisional" || rstatus == "ProvisionalC") && tnow.After(end_date.Add(660*time.Minute)) {
 			//	イベント終了時を含む日の24時00分から11時間経過し、最終結果格納用のレコードが作成済みである。
 			gschedule.Method = "GetConfirmed"
 		} else {
