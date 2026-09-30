@@ -39,7 +39,8 @@ import (
 
 	"github.com/Chouette2100/exsrapi/v2"
 	//	"github.com/Chouette2100/srapi/v2"
-	"github.com/Chouette2100/srdblib/v2"
+
+	"SRGSE5M/GSE5Mlib"
 )
 
 // 現時点で（確定データ取得を含む）獲得ポイントデータ取得が必要なイベントの一覧を作成する
@@ -65,7 +66,7 @@ func GetSchedule() (
 	//	開催中のイベントを取得する
 	sqlstmt := "select eventid, ieventid, starttime, endtime, rstatus, fromorder, toorder, cmap, thinit, thdelta from event "
 	sqlstmt += " where starttime < ? and endtime > ? and toorder != 0 and achk = 0 "
-	stmt, Err := srdblib.Db.Prepare(sqlstmt)
+	stmt, Err := GSE5Mlib.Db.Prepare(sqlstmt)
 	if Err != nil {
 		log.Printf("GetSchedule() Prepare() err=%s\n", Err.Error())
 		status = -5
@@ -160,7 +161,7 @@ func GetSchedule() (
 	for i := 0; i < len(gschedulelist); i++ {
 
 		sqlstmt := "select intervalmin, modmin, modsec from event where eventid = ?"
-		Err = srdblib.Db.QueryRow(sqlstmt, gschedulelist[i].Eventid).Scan(&gschedulelist[i].Intervalmin, &gschedulelist[i].Modmin, &gschedulelist[i].Modsec)
+		Err = GSE5Mlib.Db.QueryRow(sqlstmt, gschedulelist[i].Eventid).Scan(&gschedulelist[i].Intervalmin, &gschedulelist[i].Modmin, &gschedulelist[i].Modsec)
 		if Err != nil {
 			log.Printf("GetSchedule() select err=[%s]\n", Err.Error())
 			status = -1

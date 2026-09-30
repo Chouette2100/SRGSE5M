@@ -38,7 +38,6 @@ import (
 
 	"github.com/Chouette2100/exsrapi/v2"
 	//	"github.com/Chouette2100/srapi/v2"
-	"github.com/Chouette2100/srdblib/v2"
 )
 
 func GetConfirmed(gschedule Gschedule) (status int) {
@@ -85,7 +84,7 @@ func GetConfirmed(gschedule Gschedule) (status int) {
 	log.Printf("%s isconfirm =%t, isquest=%t\n", eventid, isconfirm, isquest)
 	if isconfirm || isquest {
 		sqlstmt := "update event set rstatus = ? where eventid = ?"
-		_, err = srdblib.Db.Exec(sqlstmt, "Confirmed", eventid)
+		_, err = GSE5Mlib.Db.Exec(sqlstmt, "Confirmed", eventid)
 
 		if err != nil {
 			log.Printf("%s GetConfirmed() update event err=[%s]\n", eventid, err.Error())

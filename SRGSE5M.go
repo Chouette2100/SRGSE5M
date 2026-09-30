@@ -26,12 +26,14 @@ EvalPoints2　Folder Interval Mod HH_Detail FTitle FDetail
 package main
 
 import (
+	// "database/sql"
 	//	"crypto/aes"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+
 	// "strconv"
 	"sync"
 	"syscall"
@@ -63,8 +65,11 @@ import (
 
 	"github.com/Chouette2100/exsrapi/v2"
 	"github.com/Chouette2100/srapi/v2"
-	"github.com/Chouette2100/srdblib/v2"
+	"github.com/Chouette2100/srdblib/v3"
 )
+
+// var Db *sql.DB
+// var Dbmap *gorp.DbMap
 
 /*
 	EvalPoints2A02 2019/04/30
@@ -181,21 +186,24 @@ import (
 	Ver. 021AY02	ScanActive()にpanicをrecoverする処理を追加する。
 	Ver. 021AZ00	シグナルを捕捉して終了するようにする(グレイスフルシャットダウン)
 	Ver. 021AZ01	シグナルを検出したときのメッセージを実態に合わせる。main.goをmain.goとInsertIntoPoints.goに分離する。
-	Ver. 021AZ02	srdblib.Dberrをすべてerrとする
+	Ver. 021AZ02	Dberrをすべてerrとする
 	Ver. 021BA00    GetPointsAll()でのイベント終了時の検出を獲得ポイント取得時にも行う。
-	Ver. 021BA01    main()でのdefer srdblib.Dbmap.Db.Close()のもれを補う
+	Ver. 021BA01    main()でのdefer Dbmap.Db.Close()のもれを補う
 	Ver. 200100     go.modを作り直す。
 	Ver. 200101     ScanActive()で異常終了時の出力をlog出力に変更する。
 	Ver. 200102     srapiの変更（useragent）、go 1.25.4
 	Ver. 200103     ScanActive()でblockid=0のときのrankの更新は原則としてしない
 	Ver. 200104     暫定結果の取得にあわせ、rstatus=="Provisional"にrstatus = "ProvisionalC"の条件も加える
+	Ver. 200105     GetSchedule()の実行結果がエラーでも処理は続行する。
+	Ver. 200200     sops/ageによるログイン情報の暗号化を行う。srdblib/v3に対応する
+	Ver. 200201     rdblib/v3への対応でmainにおいたDbとDbMapはGSE5Mlibにおくように変更する
 
 	課題
 		登録済みの開催予定イベントの配信者がそれを取り消し、別のイベントに参加した場合scoremapを使用した処理に問題が生じる
 
 */
 
-const version = "200104"
+const version = "200201"
 
 const Maxroom = 10
 const ConfirmedAt = 59 //	イベント終了時刻からこの秒数経った時刻に最終結果を格納する。
@@ -361,7 +369,10 @@ func main() {
 
 	//	データベースとの接続をオープンする。
 	var dbconfig *srdblib.DBConfig
-	dbconfig, err = srdblib.OpenDb("DBConfig.yml")
+	GSE5Mlib.Db, dbconfig, err = srdblib.OpenDb("DBConfig.enc.yml")
+	if err != nil {
+		GSE5Mlib.Db, dbconfig, err = srdblib.OpenDb("DBConfig.yml")
+	}
 	if err != nil {
 		err = fmt.Errorf("srdblib.OpenDb() returned error. %w", err)
 		log.Printf("%s\n", err.Error())
@@ -370,25 +381,25 @@ func main() {
 	if dbconfig.UseSSH {
 		defer srdblib.Dialer.Close()
 	}
-	defer srdblib.Db.Close()
+	defer GSE5Mlib.Db.Close()
 
 	log.Printf("********** Dbhost=<%s> Dbname = <%s> Dbuser = <%s> Dbpw = <%s>\n",
 		(*dbconfig).DBhost, (*dbconfig).DBname, (*dbconfig).DBuser, (*dbconfig).DBpswd)
 
 	//	gorpの初期設定を行う
 	dial := gorp.MySQLDialect{Engine: "InnoDB", Encoding: "utf8mb4"}
-	srdblib.Dbmap = &gorp.DbMap{Db: srdblib.Db, Dialect: dial, ExpandSliceArgs: true}
-	defer srdblib.Dbmap.Db.Close() // gorpのDB接続をクローズ
+	GSE5Mlib.Dbmap = &gorp.DbMap{Db: GSE5Mlib.Db, Dialect: dial, ExpandSliceArgs: true}
+	defer GSE5Mlib.Dbmap.Db.Close() // gorpのDB接続をクローズ
 
-	srdblib.Dbmap.AddTableWithName(srdblib.User{}, "user").SetKeys(false, "Userno")
-	srdblib.Dbmap.AddTableWithName(srdblib.Userhistory{}, "userhistory").SetKeys(false, "Userno", "Ts")
-	srdblib.Dbmap.AddTableWithName(srdblib.Points{}, "points").SetKeys(false, "Eventid", "User_id", "Ts")
+	GSE5Mlib.Dbmap.AddTableWithName(srdblib.User{}, "user").SetKeys(false, "Userno")
+	GSE5Mlib.Dbmap.AddTableWithName(srdblib.Userhistory{}, "userhistory").SetKeys(false, "Userno", "Ts")
+	GSE5Mlib.Dbmap.AddTableWithName(srdblib.Points{}, "points").SetKeys(false, "Eventid", "User_id", "Ts")
 
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Wuser{}, "wuser").SetKeys(false, "Userno")
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Userhistory{}, "wuserhistory").SetKeys(false, "Userno", "Ts")
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "wevent").SetKeys(false, "Eventid")
-	srdblib.Dbmap.AddTableWithName(srdblib.Eventuser{}, "eventuser").SetKeys(false, "Eventid", "Userno")
-	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "event").SetKeys(false, "Eventid")
+	//	Dbmap.AddTableWithName(srdblib.Wuser{}, "wuser").SetKeys(false, "Userno")
+	//	Dbmap.AddTableWithName(srdblib.Userhistory{}, "wuserhistory").SetKeys(false, "Userno", "Ts")
+	//	Dbmap.AddTableWithName(srdblib.Event{}, "wevent").SetKeys(false, "Eventid")
+	GSE5Mlib.Dbmap.AddTableWithName(srdblib.Eventuser{}, "eventuser").SetKeys(false, "Eventid", "Userno")
+	GSE5Mlib.Dbmap.AddTableWithName(srdblib.Event{}, "event").SetKeys(false, "Eventid")
 
 	//      cookiejarがセットされたHTTPクライアントを作る
 	client, jar, err := exsrapi.CreateNewClient("ShowroomCGI")
@@ -476,7 +487,7 @@ func main() {
 			gschedulelist, status = GetSchedule()
 			if status != 0 {
 				log.Printf("GetSchedule() status=%d\n", status)
-				return
+				// return
 			}
 			//	fmt.Printf("now=%s t=%s status=%d len=%d\n", time.Now().Format("2006/01/02 15:04:05"), t.Format("2006/01/02 15:04:05"), status, len(gschedulelist))
 

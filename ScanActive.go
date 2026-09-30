@@ -22,7 +22,7 @@ import (
 
 	"github.com/Chouette2100/exsrapi/v2"
 	"github.com/Chouette2100/srapi/v2"
-	"github.com/Chouette2100/srdblib/v2"
+	"github.com/Chouette2100/srdblib/v3"
 )
 
 // gscheduleで指定したイベントについて配信者さんの獲得ポイントを取得し、保存条件に合致するものをDBに保存する。
@@ -47,7 +47,7 @@ func ScanActive(client *http.Client, gschedule Gschedule) (status int) {
 	defer exsrapi.PrintExf(cmt0, fncname)()
 
 	sqlstmt := "select userno, iscntrbpoints from eventuser where eventid = ? and istarget ='Y'"
-	stmt, err = srdblib.Db.Prepare(sqlstmt)
+	stmt, err = GSE5Mlib.Db.Prepare(sqlstmt)
 	if err != nil {
 		log.Printf("ScanActive() Prepare() err=%s\n", err.Error())
 		status = -5
@@ -112,7 +112,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		//	イベントが終了した
 		log.Printf("%s set rstatus = DontGetScore.\n", eventid)
 		sqlstmte := "update event set rstatus = ? where eventid = ?"
-		_, err = srdblib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
+		_, err = GSE5Mlib.Db.Exec(sqlstmte, "DontGetScore", gschedule.Eventid)
 
 		if err != nil {
 			log.Printf("%s update event err=[%s]\n", eventid, err.Error())
@@ -144,7 +144,7 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	// var err error
 
 	//	50位までのルームの順位、ポイントを取得する(ランキングイベントに限る)
-	pranking, err = srdblib.GetEventsRankingByApi(client, gschedule.Eventid, 1)
+	pranking, err = srdblib.GetEventsRankingByApi(GSE5Mlib.Dbmap, client, gschedule.Eventid, 1)
 	if err != nil {
 		log.Printf("%s GetEventsRankingByApi() err=[%s]\n", eventid, err.Error())
 		// 	return -1
@@ -376,9 +376,9 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 	nu := make([]newuser, 0, 50)
 
 	var tx *sql.Tx
-	tx, err = srdblib.Db.Begin()
+	tx, err = GSE5Mlib.Db.Begin()
 	if err != nil {
-		log.Printf("%s srdblib.Db.Begin() err=[%s]\n", eventid, err.Error())
+		log.Printf("%s GSE5Mlib.Db.Begin() err=[%s]\n", eventid, err.Error())
 		return -1
 	}
 	defer tx.Rollback()
@@ -717,13 +717,13 @@ func GetPointsAll(client *http.Client, idList []string, gschedule Gschedule, cnt
 		id := v.userno
 		point := v.point
 		rank := v.rank
-		itfc, err := srdblib.Dbmap.Get(srdblib.Eventuser{}, eventid, id)
+		itfc, err := GSE5Mlib.Dbmap.Get(srdblib.Eventuser{}, eventid, id)
 		if err != nil {
-			log.Printf("%s id=%6d Dbmap.Get(Eventuser{},...) err=[%v]\n", eventid, id, err)
+			log.Printf("%s id=%6d GSE5Mlib.Dbmap.Get(Eventuser{},...) err=[%v]\n", eventid, id, err)
 			continue
 		}
 		if itfc == nil {
-			err := srdblib.UpinsEventuser(client, rank, point, eventid, gschedule.Starttime, gschedule.Cmap, id, timestamp)
+			err := srdblib.UpinsEventuser(GSE5Mlib.Db, GSE5Mlib.Dbmap, client, rank, point, eventid, gschedule.Starttime, gschedule.Cmap, id, timestamp)
 			if err != nil {
 				log.Printf("%s id=%6d UpinsEventuser() err=[%v]\n", eventid, id, err)
 			} else {

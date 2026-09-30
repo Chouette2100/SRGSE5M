@@ -7,6 +7,7 @@ https://opensource.org/licenses/mit-license.php
 package SRDBlib
 
 import (
+	"database/sql"
 	"strings"
 
 	"fmt"
@@ -16,12 +17,9 @@ import (
 	"sort"
 	"time"
 
-	//	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/dustin/go-humanize"
-
-	"github.com/Chouette2100/srdblib/v2"
 )
 
 /*
@@ -31,10 +29,13 @@ import (
 021AA00	gorpを導入するとともに srdblib を共通パッケージに変更する（第一ステップ）
 021AA01	VSCaodeで発生したエラーを修正する（処理には影響しない）
 021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
-021AZ02	srdblib.Dberrをすべてerrとする
+021AZ02	Dberrをすべてerrとする
 */
 
 const Version = "021AZ02"
+
+var Db *sql.DB
+var Err error
 
 type Event_Inf struct {
 	Event_ID    string
@@ -217,7 +218,7 @@ func SelectEventNoAndName(eventid string) (
 
 	status = 0
 
-	err := srdblib.Db.QueryRow("select event_name, period from event where eventid ='"+eventid+"'").Scan(&eventname, &period)
+	err := Db.QueryRow("select event_name, period from event where eventid ='"+eventid+"'").Scan(&eventname, &period)
 
 	if err == nil {
 		return
@@ -240,7 +241,7 @@ func SelectEventInf(eventid string) (eventinf Event_Inf, status int) {
 	sql := "select eventid,ieventid,event_name, period, starttime, endtime, noentry, intervalmin, modmin, modsec, "
 	sql += " Fromorder, Toorder, Resethh, Resetmm, Nobasis, Maxdsp, cmap, target, maxpoint "
 	sql += " from event where eventid = ?"
-	err := srdblib.Db.QueryRow(sql, eventid).Scan(
+	err := Db.QueryRow(sql, eventid).Scan(
 		&eventinf.Event_ID,
 		&eventinf.I_Event_ID,
 		&eventinf.Event_name,
@@ -312,7 +313,7 @@ func SelectEventRoomInfList(
 		sql += " order by e.point desc"
 	}
 
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("%s SelectEventRoomInfList() Prepare() err=%s\n", eventid, err.Error())
 		status = -5
@@ -479,7 +480,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	norow = 0
 
 	//	log.Printf("SelectPointList() userno=%d eventid=%s\n", userno, eventid)
-	stmt1, err := srdblib.Db.Prepare("SELECT count(*) FROM points where user_id = ? and eventid = ?")
+	stmt1, err := Db.Prepare("SELECT count(*) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("%s err=[%s]\n", eventid, err.Error())
@@ -503,7 +504,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	stmt1.Close()
 
 	//	stmt1, err = Db.Prepare("SELECT max(t.t) FROM timeacq t join points p where t.idx=p.idx and user_id = ? and event_id = ?")
-	stmt1, err = srdblib.Db.Prepare("SELECT max(ts) FROM points where user_id = ? and eventid = ?")
+	stmt1, err = Db.Prepare("SELECT max(ts) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("%s err=[%s]\n", eventid, err.Error())
@@ -545,7 +546,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	//	----------------------------------------------------
 
 	//	stmt2, err := Db.Prepare("select t.t, p.point from points p join timeacq t on t.idx = p.idx where user_id = ? and event_id = ? order by t.t")
-	stmt2, err := srdblib.Db.Prepare("select ts, point from points where user_id = ? and eventid = ? order by ts")
+	stmt2, err := Db.Prepare("select ts, point from points where user_id = ? and eventid = ? order by ts")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("%s err=[%s]\n", eventid, err.Error())
@@ -606,7 +607,7 @@ func UpdatePointsSetQstatus(
 	nrow := 0
 	//	err := Db.QueryRow("select count(*) from points where eventid = ? and user_id = ? and pstatus = 'Conf.'", eventid, userno).Scan(&nrow)
 	sql := "select count(*) from points where eventid = ? and user_id = ? and ( pstatus = 'Conf.' or pstatus = 'Prov.' )"
-	err := srdblib.Db.QueryRow(sql, eventid, userno).Scan(&nrow)
+	err := Db.QueryRow(sql, eventid, userno).Scan(&nrow)
 
 	if err != nil {
 		log.Printf("%s select count(*) from user ... err=[%s]\n", eventid, err.Error())
@@ -624,7 +625,7 @@ func UpdatePointsSetQstatus(
 	sql += "qtime=? "
 	//	sql += "where user_id=? and eventid = ? and pstatus = 'Conf.'"
 	sql += "where user_id=? and eventid = ? and ( pstatus = 'Conf.' or pstatus = 'Prov.' )"
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("%s UpdatePointsSetQstatus() Update/Prepare err=%s\n", eventid, err.Error())
 		status = -1

@@ -64,9 +64,21 @@ func SaveScoremap() (err error) {
 	scoremap.Range(func(id, value interface{}) bool {
 		//	log.Println("key:", id, " value:", value)
 		ida := strings.Split(id.(string), "#")
+		if len(ida) < 2 {
+			log.Printf("DB error for id %s: %v", ida, err)
+			return true
+		}
 		if _, ok := eventmap[ida[1]]; !ok {
-			eventinf, _ := GSE5Mlib.SelectEventInf(ida[1])
+			eventinf, status := GSE5Mlib.SelectEventInf(ida[1])
+			if status != 0 {
+				log.Printf("DB error for eventid %s: %v", ida[1], status)
+				return true
+			}
 			eventmap[ida[1]] = &eventinf
+			if eventmap[ida[1]] == nil {
+				log.Printf(" uda[1] is nil: status = %d",  status)
+				return true
+			}
 		}
 		if eventmap[ida[1]].End_time.Add(72 * time.Hour).Before(time.Now()) {
 			// 過去のイベント、履歴を保存する必要はない
@@ -76,7 +88,11 @@ func SaveScoremap() (err error) {
 		} else {
 			no++
 			// 開催中あるいは終了直後のイベント
-			ls := value.(*LastScore)
+			ls, ok := value.(*LastScore)
+			if !ok || ls == nil {
+				log.Printf("DB error for id %s: value is not *LastScore", id)
+				return true
+			}
 			//	fmt.Fprintf(file, "%d\n", id)
 			//	fmt.Fprintf(file, "%s\n", ls.Eventid)
 
@@ -106,7 +122,7 @@ func SaveScoremap() (err error) {
 			log.Printf("eventid=%s is deleted from eventmap.\n", k)
 			delete(eventmap, k)
 		}
-	}	
+	}
 
 	//	file.Close()
 	log.Printf("saved=%d, ignored=%d, len(eventmap)=%d\n", no, noiv, len(eventmap))

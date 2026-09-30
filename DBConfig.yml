@@ -1,7 +1,7 @@
 ## DBサーバーのホスト名、指定しなければlocalhost
-#DBhost:
+DBhost: 127.0.0.1
 #
-#DBport:
+DBport: 9911
 
 
 # データベース名
@@ -14,17 +14,4 @@ DBpswd: ${DBPW}
 
 # SSH接続を使うか否か
 UseSSH: false
-
-#UseSSH: true
-#SSHhost: ${SSHHOST}
-#SSHport: ${SSHPORT}
-#SSHuser: ${SSHUSER}
-##SSHprvkey: ${SSHKEY}
-##SSHpswd: ${SSHPSWD}
-
-SSHhost: 133.18.233.43
-SSHport: 8022
-SSHuser: chouette
-#SSHpswd:
-SSHprvkey: /home/chouette/.ssh/id_ed25519
 

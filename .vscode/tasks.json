@@ -15,8 +15,8 @@
             "args": [
                 "build",
                 "-v",
-                //  "./..."
-                "SRGSE5M.go"
+                // "./..."
+                "SRGSE5M"
             ],
             "problemMatcher": [],
             "group": {

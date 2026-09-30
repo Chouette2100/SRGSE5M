@@ -26,6 +26,8 @@ import (
 	"net/http"
 
 	"database/sql"
+
+	"github.com/go-gorp/gorp"
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/PuerkitoBio/goquery"
@@ -36,7 +38,7 @@ import (
 
 	"github.com/Chouette2100/exsrapi/v2"
 	"github.com/Chouette2100/srapi/v2"
-	"github.com/Chouette2100/srdblib/v2"
+	"github.com/Chouette2100/srdblib/v3"
 )
 
 /*
@@ -79,11 +81,14 @@ import (
 	021AE00	GetEventsRankingByApi()はイベント開催中と終了後で使い分けられるようにする。
 	021AE02	GetIsOnliveByAPI()の内部外部でエラー処理を追加する。
 	021AW00	https://www.showroom-live.com/event/room_listがなくなったため、代替手段を作る。
-	Ver. 021AZ02	srdblib.Dberrをすべてerrとする
+	Ver. 021AZ02	Dberrをすべてerrとする
 
 */
 
 const Version = "021AZ02"
+
+var Db *sql.DB
+var Dbmap *gorp.DbMap
 
 type Event_Inf struct {
 	Event_ID    string
@@ -405,7 +410,7 @@ func GetUserInfForHistory() (status int) {
 	status = 0
 
 	//	select distinct(nobasis) from event
-	stmt, err := srdblib.Db.Prepare("select distinct(nobasis) from event")
+	stmt, err := Db.Prepare("select distinct(nobasis) from event")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("err=[%s]\n", err.Error())
@@ -452,7 +457,7 @@ func GetUserInfForHistory() (status int) {
 	for _, roominf := range roominflist {
 
 		sql := "select currentevent from user where userno = ?"
-		err := srdblib.Db.QueryRow(sql, roominf.Userno).Scan(&eventid)
+		err := Db.QueryRow(sql, roominf.Userno).Scan(&eventid)
 		if err != nil {
 			log.Printf("err=[%s]\n", err.Error())
 			status = -1
@@ -657,7 +662,7 @@ func GetIsOnliveByAPI(client *http.Client, room_id string) (
 
 	status = 0
 
-	user, err := srdblib.Dbmap.Get(&srdblib.User{}, func(a string) int { i, _ := strconv.Atoi(a); return i }(room_id))
+	user, err := Dbmap.Get(&srdblib.User{}, func(a string) int { i, _ := strconv.Atoi(a); return i }(room_id))
 	if user == nil {
 		log.Printf("GetIsOnliveByAPI() userno=%s user == nil\n", room_id)
 		status = -1
@@ -878,7 +883,7 @@ func UpdateRoomInf(eventid, suserno, longname, shortname, istarget, graph, color
 
 	sql := "update user set longname=?, shortname=? where userno = ?"
 
-	stmt1, err := srdblib.Db.Prepare(sql)
+	stmt1, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("UpdateRoomInf() error(Update/Prepare) err=%s\n", err.Error())
 		status = -1
@@ -917,7 +922,7 @@ func UpdateRoomInf(eventid, suserno, longname, shortname, istarget, graph, color
 	//	sql = "update eventuser set istarget=?, graph=?, color=? where eventno=? and userno=?"
 	sql = "update eventuser set istarget=?, graph=?, color=?, iscntrbpoints=? where eventid=? and userno=?"
 
-	stmt2, err := srdblib.Db.Prepare(sql)
+	stmt2, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("UpdateRoomInf() error(Update/Prepare) err=%s\n", err.Error())
 		status = -1
@@ -943,7 +948,7 @@ func UpdateEventuserSetPoint(eventid, userid string, point int) (status int) {
 	userno, _ := strconv.Atoi(userid)
 
 	sql := "update eventuser set point=? where eventid = ? and userno = ?"
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("UpdateEventuserSetPoint() error (Update/Prepare) err=%s\n", err.Error())
 		status = -1
@@ -971,7 +976,7 @@ func InsertEventInf(eventinf *Event_Inf) (
 		sql += " Fromorder, Toorder, Resethh, Resetmm, Nobasis, Maxdsp, Cmap, target, maxpoint "
 		sql += ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 		log.Printf("db.Prepare(sql)\n")
-		stmt, err := srdblib.Db.Prepare(sql)
+		stmt, err := Db.Prepare(sql)
 		if err != nil {
 			log.Printf("error InsertEventInf() (INSERT/Prepare) err=%s\n", err.Error())
 			status = -1
@@ -1038,7 +1043,7 @@ func UpdateEventInf(eventinf *Event_Inf) (
 		//	sql += " where eventno = ?"
 		sql += " where eventid = ?"
 		log.Printf("db.Prepare(sql)\n")
-		stmt, err := srdblib.Db.Prepare(sql)
+		stmt, err := Db.Prepare(sql)
 		if err != nil {
 			log.Printf("UpdateEventInf() error (Update/Prepare) err=%s\n", err.Error())
 			status = -1
@@ -1111,7 +1116,7 @@ func InsertIntoUser[T srdblib.UserT](
 ) (
 	err error,
 ) {
-	srdblib.InsertUsertable(client, tnow, xuser)
+	srdblib.InsertUsertable(Dbmap, client, tnow, xuser)
 	return
 }
 */
@@ -1130,7 +1135,7 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 	log.Printf("  *** InsertIntoOrUpdateUser() *** userno=%d\n", userno)
 
 	nrow := 0
-	err := srdblib.Db.QueryRow("select count(*) from user where userno =" + roominf.ID).Scan(&nrow)
+	err := Db.QueryRow("select count(*) from user where userno =" + roominf.ID).Scan(&nrow)
 
 	if err != nil {
 		log.Printf("select count(*) from user ... err=[%s]\n", err.Error())
@@ -1153,7 +1158,7 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 		// srdblib.InsertIntoUser(client, tnow, userno)
 		var newuser srdblib.User
 		newuser.Userno = userno
-		_, err = srdblib.InsertUsertable(&http.Client{}, time.Now(), &newuser)
+		_, err = srdblib.InsertUsertable(Dbmap, &http.Client{}, time.Now(), &newuser)
 		if err != nil {
 			log.Printf("InsertIntoOrUpdateUser() error(InsertUsertable) err=%s\n", err.Error())
 			// status = -1
@@ -1169,7 +1174,7 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 			sql := "INSERT INTO user(userno, userid, user_name, longname, shortname, genre, `rank`, nrank, prank, level, followers, ts, currentevent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
 			//	log.Printf("sql=%s\n", sql)
-			stmt1, err = srdblib.Db.Prepare(sql)
+			stmt1, err = Db.Prepare(sql)
 			if err != nil {
 				log.Printf("InsertIntoOrUpdateUser() error() (INSERT/Prepare) err=%s\n", err.Error())
 				status = -1
@@ -1223,7 +1228,7 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 		} else {
 
 			sql := "select user_name, genre, `rank`, nrank, prank, level, followers from user where userno = ?"
-			err = srdblib.Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
+			err = Db.QueryRow(sql, userno).Scan(&name, &genre, &rank, &nrank, &prank, &level, &followers)
 			if err != nil {
 				log.Printf("err=[%s]\n", err.Error())
 				status = -1
@@ -1253,7 +1258,7 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 				sql += "currentevent=? "
 				sql += "where userno=?"
 
-				stmt2, err = srdblib.Db.Prepare(sql)
+				stmt2, err = Db.Prepare(sql)
 
 				if err != nil {
 					log.Printf("InsertIntoOrUpdateUser() error(Update/Prepare) err=%s\n", err.Error())
@@ -1289,7 +1294,7 @@ func InsertIntoOrUpdateUser(client *http.Client, tnow time.Time, eventid string,
 		if isnew {
 			sql := "INSERT INTO userhistory(userno, user_name, genre, `rank`, nrank, prank, level, followers, ts) VALUES(?,?,?,?,?,?,?,?,?)"
 			//	log.Printf("sql=%s\n", sql)
-			stmt3, err = srdblib.Db.Prepare(sql)
+			stmt3, err = Db.Prepare(sql)
 			if err != nil {
 				log.Printf("error(INSERT into userhistory/Prepare) err=%s\n", err.Error())
 				status = -1
@@ -1344,7 +1349,7 @@ func InsertIntoEventUser(i int, eventid string, roominf RoomInfo) (status int) {
 
 	nrow := 0
 	sql := "select count(*) from eventuser where userno =? and eventid = ?"
-	err := srdblib.Db.QueryRow(sql, roominf.ID, eventid).Scan(&nrow)
+	err := Db.QueryRow(sql, roominf.ID, eventid).Scan(&nrow)
 
 	if err != nil {
 		log.Printf("select count(*) from user ... err=[%s]\n", err.Error())
@@ -1359,7 +1364,7 @@ func InsertIntoEventUser(i int, eventid string, roominf RoomInfo) (status int) {
 
 	if nrow == 0 {
 		sql := "INSERT INTO eventuser(eventid, userno, istarget, graph, color, iscntrbpoints, point) VALUES(?,?,?,?,?,?,?)"
-		stmt, err := srdblib.Db.Prepare(sql)
+		stmt, err := Db.Prepare(sql)
 		if err != nil {
 			log.Printf("error(INSERT/Prepare) err=%s\n", err.Error())
 			status = -1
@@ -1499,7 +1504,7 @@ func GetEventInfAndRoomList(
 	//      すべての処理が終了したらcookiejarを保存する。
 	defer jar.Save()
 
-	pranking, err := srdblib.GetEventsRankingByApi(client, eventid, 2)
+	pranking, err := srdblib.GetEventsRankingByApi(Dbmap, client, eventid, 2)
 	if err != nil {
 		log.Printf("GetEventsRankingByApi: %s\n", err.Error())
 		return
@@ -1755,7 +1760,7 @@ func SelectEventNoAndName(eventid string) (
 
 	status = 0
 
-	err := srdblib.Db.QueryRow("select event_name, period from event where eventid ='"+eventid+"'").Scan(&eventname, &period)
+	err := Db.QueryRow("select event_name, period from event where eventid ='"+eventid+"'").Scan(&eventname, &period)
 
 	if err == nil {
 		return
@@ -1785,7 +1790,7 @@ func SelectUserName(userno int) (
 
 	sql := "select longname, shortname, `rank`, nrank, level, followers from user where userno = ?"
 
-	err := srdblib.Db.QueryRow(sql, userno).Scan(&longname, &shortname, &rank, &nrank, &level, &followers)
+	err := Db.QueryRow(sql, userno).Scan(&longname, &shortname, &rank, &nrank, &level, &followers)
 
 	if err != nil {
 		log.Printf("err=[%s]\n", err.Error())
@@ -1811,7 +1816,7 @@ func SelectUserColor(userno int, eventid string) (
 	//	sql := "select color from eventuser where userno = ? and eventno = ?"
 	sql := "select color from eventuser where userno = ? and eventid = ?"
 
-	err := srdblib.Db.QueryRow(sql, userno, eventid).Scan(&color)
+	err := Db.QueryRow(sql, userno, eventid).Scan(&color)
 
 	i := 0
 	for ; i < len(Colorlist); i++ {
@@ -1841,7 +1846,7 @@ func SelectRoomLevel(userno int, levelonly int) (roomlevelinf RoomLevelInf, stat
 	status = 0
 
 	sqlstmt := "select user_name, genre, `rank`, nrank, prank, level, followers, ts from userhistory where userno = ? order by ts desc"
-	stmt, err = srdblib.Db.Prepare(sqlstmt)
+	stmt, err = Db.Prepare(sqlstmt)
 	if err != nil {
 		log.Printf("SelectRoomLevel() (3) err=%s\n", err.Error())
 		status = -3
@@ -1916,7 +1921,7 @@ func SelectUserList() (userlist []User, status int) {
 	sql += " from event e join user u on e.nobasis=u.userno "
 	sql += " order by e.nobasis"
 
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("err=[%s]\n", err.Error())
 		status = -1
@@ -1969,7 +1974,7 @@ func SelectEventuserList(eventid string) (userlist []User, status int) {
 	sql += " where e.eventid = ? "
 	sql += " order by e.userno"
 
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 	if err != nil {
 		log.Printf("err=[%s]\n", err.Error())
 		status = -1
@@ -2027,7 +2032,7 @@ func SelectEventList(userno int) (eventlist []Event, status int) {
 		}
 	*/
 
-	stmt, err = srdblib.Db.Prepare("select eventid, event_name from event where endtime IS not null and nobasis = ? order by endtime desc")
+	stmt, err = Db.Prepare("select eventid, event_name from event where endtime IS not null and nobasis = ? order by endtime desc")
 	if err != nil {
 		log.Printf("err=[%s]\n", err.Error())
 		status = -1
@@ -2151,7 +2156,7 @@ func SelectEventInfAndRoomList() (IDlist []int, status int) {
 	//	err = Db.QueryRow("select max(point) from points where event_id = '" + fmt.Sprintf("%d", Event_inf.Event_no) + "'").Scan(&Event_inf.MaxPoint)
 	//	sql := "select max(point) from eventuser where eventno = ? and graph = 'Y'"
 	sql := "select max(point) from eventuser where eventid = ? and graph = 'Y'"
-	err := srdblib.Db.QueryRow(sql, Event_inf.Event_ID).Scan(&Event_inf.MaxPoint)
+	err := Db.QueryRow(sql, Event_inf.Event_ID).Scan(&Event_inf.MaxPoint)
 
 	if err != nil {
 		log.Printf("select max(point) from eventuser where eventid = '%s'\n", Event_inf.Event_ID)
@@ -2169,7 +2174,7 @@ func SelectEventInfAndRoomList() (IDlist []int, status int) {
 	//	sql += " and eventno = ? "
 	sql += " and eventid = ? "
 	sql += " order by point desc"
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("err=[%s]\n", err.Error())
@@ -2220,7 +2225,7 @@ func SelectEventInf(eventid string) (eventinf Event_Inf, status int) {
 	sql := "select eventid,event_name, period, starttime, endtime, noentry, intervalmin, modmin, modsec, "
 	sql += " Fromorder, Toorder, Resethh, Resetmm, Nobasis, Maxdsp, cmap, target, maxpoint "
 	sql += " from event where eventid = ?"
-	err := srdblib.Db.QueryRow(sql, eventid).Scan(
+	err := Db.QueryRow(sql, eventid).Scan(
 		&eventinf.Event_ID,
 		&eventinf.Event_name,
 		&eventinf.Period,
@@ -2270,7 +2275,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	norow = 0
 
 	//	log.Printf("SelectPointList() userno=%d eventid=%s\n", userno, eventid)
-	stmt1, err := srdblib.Db.Prepare("SELECT count(*) FROM points where user_id = ? and eventid = ?")
+	stmt1, err := Db.Prepare("SELECT count(*) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("err=[%s]\n", err.Error())
@@ -2292,7 +2297,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	//	----------------------------------------------------
 
 	//	stmt1, err = Db.Prepare("SELECT max(t.t) FROM timeacq t join points p where t.idx=p.idx and user_id = ? and event_id = ?")
-	stmt2, err := srdblib.Db.Prepare("SELECT max(ts) FROM points where user_id = ? and eventid = ?")
+	stmt2, err := Db.Prepare("SELECT max(ts) FROM points where user_id = ? and eventid = ?")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("err=[%s]\n", err.Error())
@@ -2334,7 +2339,7 @@ func SelectPointList(userno int, eventid string) (norow int, tp *[]time.Time, pp
 	//	----------------------------------------------------
 
 	//	stmt2, err := Db.Prepare("select t.t, p.point from points p join timeacq t on t.idx = p.idx where user_id = ? and event_id = ? order by t.t")
-	stmt3, err := srdblib.Db.Prepare("select ts, point from points where user_id = ? and eventid = ? order by ts")
+	stmt3, err := Db.Prepare("select ts, point from points where user_id = ? and eventid = ? order by ts")
 	if err != nil {
 		//	log.Fatal(err)
 		log.Printf("err=[%s]\n", err.Error())
@@ -2395,7 +2400,7 @@ func UpdatePointsSetQstatus(
 	nrow := 0
 	//	err := Db.QueryRow("select count(*) from points where eventid = ? and user_id = ? and pstatus = 'Conf.'", eventid, userno).Scan(&nrow)
 	sql := "select count(*) from points where eventid = ? and user_id = ? and ( pstatus = 'Conf.' or pstatus = 'Prov.' )"
-	err := srdblib.Db.QueryRow(sql, eventid, userno).Scan(&nrow)
+	err := Db.QueryRow(sql, eventid, userno).Scan(&nrow)
 
 	if err != nil {
 		log.Printf("select count(*) from user ... err=[%s]\n", err.Error())
@@ -2413,7 +2418,7 @@ func UpdatePointsSetQstatus(
 	sql += "qtime=? "
 	//	sql += "where user_id=? and eventid = ? and pstatus = 'Conf.'"
 	sql += "where user_id=? and eventid = ? and ( pstatus = 'Conf.' or pstatus = 'Prov.' )"
-	stmt, err := srdblib.Db.Prepare(sql)
+	stmt, err := Db.Prepare(sql)
 
 	if err != nil {
 		log.Printf("UpdatePointsSetQstatus() Update/Prepare err=%s\n", err.Error())

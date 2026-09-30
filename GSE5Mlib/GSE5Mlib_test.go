@@ -7,8 +7,8 @@ https://opensource.org/licenses/mit-license.php
 package GSE5Mlib
 
 import (
-	"log"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -16,15 +16,14 @@ import (
 	"reflect"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/go-gorp/gorp"
-
+	_ "github.com/go-sql-driver/mysql"
 
 	"SRGSE5M/SRDBlib"
 
 	//	"github.com/Chouette2100/srapi/v2"
 	"github.com/Chouette2100/exsrapi/v2"
-	"github.com/Chouette2100/srdblib/v2"
+	"github.com/Chouette2100/srdblib/v3"
 )
 
 func TestGetEventInfAndRoomList(t *testing.T) {
@@ -52,8 +51,9 @@ func TestGetEventInfAndRoomList(t *testing.T) {
 			args: args{
 				//	eventid:      "azabusmith-mc0608",
 				//	ieventid:     36323,
-				eventid:      "enjoykaraoke_vol114",
-				ieventid:     36142,
+				// eventid:      "schoolaward26_start_b?block_id=202401",
+				eventid:      "schoolaward26_start_b",
+				ieventid:     42602,
 				breg:         1,
 				ereg:         3,
 				eventinfo:    &eventinf,
@@ -113,7 +113,10 @@ func TestGetIsOnliveByAPI(t *testing.T) {
 
 	//	データベースとの接続をオープンする。
 	var dbconfig *srdblib.DBConfig
-	dbconfig, err = srdblib.OpenDb("DBConfig.yml")
+	Db, dbconfig, err = srdblib.OpenDb("DBConfig.enc.yml")
+	if err != nil {
+		Db, dbconfig, err = srdblib.OpenDb("DBConfig.yml")
+	}
 	if err != nil {
 		err = fmt.Errorf("srdblib.OpenDb() returned error. %w", err)
 		log.Printf("%s\n", err.Error())
@@ -122,23 +125,23 @@ func TestGetIsOnliveByAPI(t *testing.T) {
 	if dbconfig.UseSSH {
 		defer srdblib.Dialer.Close()
 	}
-	defer srdblib.Db.Close()
+	defer Db.Close()
 
 	log.Printf("********** Dbhost=<%s> Dbname = <%s> Dbuser = <%s> Dbpw = <%s>\n",
 		(*dbconfig).DBhost, (*dbconfig).DBname, (*dbconfig).DBuser, (*dbconfig).DBpswd)
 
 	//	gorpの初期設定を行う
 	dial := gorp.MySQLDialect{Engine: "InnoDB", Encoding: "utf8mb4"}
-	srdblib.Dbmap = &gorp.DbMap{Db: srdblib.Db, Dialect: dial, ExpandSliceArgs: true}
+	Dbmap = &gorp.DbMap{Db: Db, Dialect: dial, ExpandSliceArgs: true}
 
-	srdblib.Dbmap.AddTableWithName(srdblib.User{}, "user").SetKeys(false, "Userno")
-	srdblib.Dbmap.AddTableWithName(srdblib.Points{}, "points").SetKeys(false, "Eventid", "User_id", "Ts")
+	Dbmap.AddTableWithName(srdblib.User{}, "user").SetKeys(false, "Userno")
+	Dbmap.AddTableWithName(srdblib.Points{}, "points").SetKeys(false, "Eventid", "User_id", "Ts")
 
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Wuser{}, "wuser").SetKeys(false, "Userno")
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Userhistory{}, "wuserhistory").SetKeys(false, "Userno", "Ts")
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "wevent").SetKeys(false, "Eventid")
-	//	srdblib.Dbmap.AddTableWithName(srdblib.Eventuser{}, "weventuser").SetKeys(false, "Eventid", "Userno")
-	srdblib.Dbmap.AddTableWithName(srdblib.Event{}, "event").SetKeys(false, "Eventid")
+	//	Dbmap.AddTableWithName(srdblib.Wuser{}, "wuser").SetKeys(false, "Userno")
+	//	Dbmap.AddTableWithName(srdblib.Userhistory{}, "wuserhistory").SetKeys(false, "Userno", "Ts")
+	//	Dbmap.AddTableWithName(srdblib.Event{}, "wevent").SetKeys(false, "Eventid")
+	//	Dbmap.AddTableWithName(srdblib.Eventuser{}, "weventuser").SetKeys(false, "Eventid", "Userno")
+	Dbmap.AddTableWithName(srdblib.Event{}, "event").SetKeys(false, "Eventid")
 
 	//      cookiejarがセットされたHTTPクライアントを作る
 	client, jar, err := exsrapi.CreateNewClient("ShowroomCGI")
@@ -159,8 +162,8 @@ func TestGetIsOnliveByAPI(t *testing.T) {
 		// TODO: Add test cases.
 		{
 			name: "TestGetIsOnliveByAPI-1",
-			args: args {
-				client: client,
+			args: args{
+				client:  client,
 				room_id: "338333",
 			},
 			wantIsonlive:  false,
