@@ -223,22 +223,27 @@ type Parameters struct {
 }
 */
 
+// LastScore は、scoremap に保持するルームごとの直近状態を表す。
+// Score/Rank/ts は直近取得値、Dup は同一値の連続回数、Sum0/Tstart0/Tend は
+// 1つのポイント変化区間を表す。Tstart1/Continued/NoOffline は配信開始時刻の
+// 再確定やオフライン継続回数を追跡するための補助情報で、Qstatus/Qtime は
+// 互換維持のための文字列表現を保持する。
 type LastScore struct {
 	Eventid string
 	Score   int
 	Rank    int
-	ts      time.Time
-	Dup     int
-	Sum0    int
-	Tstart0 time.Time
-	Tend    time.Time
+	ts      time.Time // 直近の取得時刻
+	Dup     int       // 同一の Score/Rank が続いた回数
+	Sum0    int       // 区間内の累積増分
+	Tstart0 time.Time // 区間の開始時刻
+	Tend    time.Time // 区間の終了時刻
 	//	Sum1    int
-	Tstart1   time.Time
-	Continued int // 更新（＝（1時間おきに）配信を再スタート）したときの再スタートの回数
+	Tstart1   time.Time // 現在の配信開始時刻として扱っている値
+	Continued int       // 配信再開・再検出の回数
 	//	Tend1   time.Time
-	Qstatus   string
-	Qtime     string
-	NoOffline int // isonlive でない状態が何回続いたか？
+	Qstatus   string // 表示用の累積増分文字列
+	Qtime     string // 表示用の時間帯文字列
+	NoOffline int    // オフライン状態が連続した回数
 }
 
 type Gschedule struct {
